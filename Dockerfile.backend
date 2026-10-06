@@ -1,0 +1,30 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies for OpenCV, Pillow, fonts
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy backend requirements
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend code
+COPY backend ./backend
+
+# Create data directory
+RUN mkdir -p data
+
+ENV PYTHONUNBUFFERED=1
+ENV DATA_DIR=data
+ENV DATABASE_URL=sqlite:///./data/mangaid.db
+
+EXPOSE 8000
+
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

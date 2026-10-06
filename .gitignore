@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+.env
+data/
+*.sqlite3
+*.db
+CLOUDFLARE_URL.txt
+bin/
+.pytest_cache/
+node_modules/
+.next/
+dist/
+
