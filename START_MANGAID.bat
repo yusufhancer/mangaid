@@ -18,7 +18,7 @@ taskkill /f /im cloudflared.exe >nul 2>&1
 :: Ambil IP Wi-Fi lokal
 for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -match 'Wi-Fi|Wireless|WLAN' -or ($_.InterfaceAlias -match 'Ethernet' -and $_.IPAddress -like '192.168*') } | Select-Object -ExpandProperty IPAddress -First 1)"`) do set LOCAL_IP=%%i
 
-if "%LOCAL_IP%"=="" set LOCAL_IP=192.168.101.4
+if "%LOCAL_IP%"=="" set LOCAL_IP=127.0.0.1
 
 echo [2/4] Menjalankan Backend (Python FastAPI di Port 8000)...
 start "MangaID Backend" /min cmd /c "cd /d "%~dp0" && .\venv\Scripts\uvicorn.exe backend.app.main:app --host 0.0.0.0 --port 8000"
