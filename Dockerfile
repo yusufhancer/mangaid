@@ -1,8 +1,10 @@
-# --- Stage 1: Build Frontend ---
-FROM node:20-alpine AS frontend-builder
+# --- Stage 1: Build Frontend (Debian glibc to match final container) ---
+FROM node:20-slim AS frontend-builder
 WORKDIR /build
+
 COPY frontend/package*.json ./
 RUN npm ci
+
 COPY frontend/ ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
@@ -39,12 +41,13 @@ COPY --from=frontend-builder /build/package.json ./package.json
 COPY --from=frontend-builder /build/next.config.ts ./next.config.ts
 
 # Create data directory for SQLite & Chapter Storage
-RUN mkdir -p data
+RUN mkdir -p /app/data
 
 COPY start.sh ./start.sh
-RUN chmod +x ./start.sh
+RUN sed -i 's/\r$//' ./start.sh && chmod +x ./start.sh
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV PYTHONUNBUFFERED=1
 ENV DATA_DIR=/app/data
 ENV DATABASE_URL=sqlite:////app/data/mangaid.db
