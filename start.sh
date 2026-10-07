@@ -1,8 +1,11 @@
 #!/bin/bash
 set -e
 
-echo "[MangaID Cloud] Starting Backend FastAPI on port 8000..."
-uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 &
+echo "[MangaID Cloud] Starting Backend FastAPI on port 8000 with auto-restart..."
+(while true; do
+  uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 || true
+  sleep 1
+done) &
 
 echo "[MangaID Cloud] Waiting for backend to initialize..."
 sleep 2

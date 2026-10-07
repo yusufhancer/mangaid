@@ -174,8 +174,17 @@ export default function MangaIDApp() {
       });
 
       if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.detail || "Gagal memproses URL.");
+        let errorDetail = "Gagal memproses URL.";
+        try {
+          const err = await resp.json();
+          errorDetail = err.detail || errorDetail;
+        } catch {
+          const text = await resp.text();
+          if (text) {
+            errorDetail = `Server error (${resp.status}): ${text.slice(0, 100)}`;
+          }
+        }
+        throw new Error(errorDetail);
       }
 
       const data: IngestData = await resp.json();

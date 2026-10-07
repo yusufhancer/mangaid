@@ -38,16 +38,33 @@ class MangaDexAdapter(SourceAdapter):
             "Accept": "application/json"
         }
 
-        async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
-            # 1. Fetch chapter metadata
-            meta_resp = await client.get(f"{self.BASE_API_URL}/chapter/{chapter_id}")
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            # 1. Fetch chapter metadata with includes[]=manga for real series title
+            meta_resp = await client.get(f"{self.BASE_API_URL}/chapter/{chapter_id}?includes[]=manga")
             meta_resp.raise_for_status()
-            meta_json = meta_resp.json().get("data", {})
-            attr = meta_json.get("attributes", {})
+            raw_meta = meta_resp.json().get("data", {})
+            attr = raw_meta.get("attributes", {})
             
-            chapter_number = attr.get("chapter")
-            title = attr.get("title")
+            chapter_number = attr.get("chapter") or "1"
+            chapter_title = attr.get("title")
             language_hint = attr.get("translatedLanguage")
+
+            # Extract actual manga series title from relationships
+            manga_title = None
+            for rel in raw_meta.get("relationships", []):
+                if rel.get("type") == "manga":
+                    m_attr = rel.get("attributes", {})
+                    t_dict = m_attr.get("title", {})
+                    if isinstance(t_dict, dict) and t_dict:
+                        manga_title = t_dict.get("en") or t_dict.get("ja-ro") or next(iter(t_dict.values()), None)
+                    if not manga_title and isinstance(m_attr.get("altTitles"), list):
+                        for alt in m_attr.get("altTitles", []):
+                            if isinstance(alt, dict) and "en" in alt:
+                                manga_title = alt["en"]
+                                break
+                    break
+
+            resolved_title = manga_title or chapter_title or "Manga"
 
             # 2. Fetch pages through at-home server endpoint
             at_home_resp = await client.get(f"{self.BASE_API_URL}/at-home/server/{chapter_id}")
@@ -66,10 +83,10 @@ class MangaDexAdapter(SourceAdapter):
                 for fname in file_names
             ]
 
-            logger.info("Successfully fetched %d pages from MangaDex chapter %s", len(page_urls), chapter_id)
+            logger.info("Successfully fetched %d pages for '%s' (Ch. %s) from MangaDex", len(page_urls), resolved_title, chapter_number)
 
             return ChapterData(
-                title=title,
+                title=resolved_title,
                 chapter_number=chapter_number,
                 language_hint=language_hint,
                 page_image_urls=page_urls,
