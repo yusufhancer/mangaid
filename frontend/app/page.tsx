@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Link as LinkIcon,
   Upload,
@@ -21,6 +21,10 @@ import {
   FolderArchive,
   HelpCircle,
   History,
+  Pencil,
+  Layers,
+  ArrowUpDown,
+  Check,
 } from "lucide-react";
 
 const BACKEND_URL = "";
@@ -74,6 +78,32 @@ interface SavedChapter {
   created_at: string | null;
 }
 
+interface MangaSeries {
+  title: string;
+  chapters: SavedChapter[];
+  totalChapters: number;
+  totalPages: number;
+  totalRenderedPages: number;
+  coverChapterId: string;
+  latestCreatedAt: string | null;
+}
+
+interface RenameTarget {
+  type: "series" | "chapter";
+  id?: string;
+  oldTitle?: string;
+  currentTitle: string;
+  currentChapterNumber?: string;
+}
+
+interface DeleteTarget {
+  type: "series" | "chapter";
+  id?: string;
+  title: string;
+  count?: number;
+  redirectHome?: boolean;
+}
+
 export default function MangaIDApp() {
   // Navigation states: 'home' | 'review' | 'progress' | 'reader'
   const [view, setView] = useState<"home" | "review" | "progress" | "reader">("home");
@@ -97,6 +127,21 @@ export default function MangaIDApp() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [showHelp, setShowHelp] = useState(false);
 
+  // Series & Drawer states
+  const [selectedSeries, setSelectedSeries] = useState<MangaSeries | null>(null);
+  const [drawerSearchQuery, setDrawerSearchQuery] = useState("");
+  const [drawerSortOrder, setDrawerSortOrder] = useState<"asc" | "desc">("asc");
+
+  // Rename states
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
+  const [newTitleInput, setNewTitleInput] = useState("");
+  const [newChapterNumInput, setNewChapterNumInput] = useState("");
+  const [isRenaming, setIsRenaming] = useState(false);
+
+  // Delete states
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Review states
   const [ingestResult, setIngestResult] = useState<IngestData | null>(null);
   const [reviewPages, setReviewPages] = useState<string[]>([]);
@@ -109,10 +154,6 @@ export default function MangaIDApp() {
   // Reader states
   const [chapterData, setChapterData] = useState<ChapterData | null>(null);
   const [showTranslated, setShowTranslated] = useState(true);
-
-  // Delete chapter states
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string; redirectHome?: boolean } | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Quick test URL
   const SAMPLE_URL = "https://mangadex.org/chapter/e9cfaece-daa1-4830-b239-2d09c407b56b/6";
@@ -289,28 +330,217 @@ export default function MangaIDApp() {
     }
   };
 
-  // Handle Chapter Deletion
-  const confirmDeleteChapter = async () => {
+  // Series Grouping
+  const seriesList: MangaSeries[] = useMemo(() => {
+    const map = new Map<string, SavedChapter[]>();
+    savedChapters.forEach((ch) => {
+      const sTitle = (ch.title || "Untitled Manga").trim();
+      if (!map.has(sTitle)) {
+        map.set(sTitle, []);
+      }
+      map.get(sTitle)!.push(ch);
+    });
+
+    const list: MangaSeries[] = [];
+    map.forEach((chList, title) => {
+      chList.sort((a, b) => {
+        const numA = parseFloat((a.chapter_number || "0").replace(/[^\d.]/g, "")) || 0;
+        const numB = parseFloat((b.chapter_number || "0").replace(/[^\d.]/g, "")) || 0;
+        return numA - numB;
+      });
+
+      const totalPages = chList.reduce((acc, c) => acc + (c.total_pages || 0), 0);
+      const totalRendered = chList.reduce((acc, c) => acc + (c.rendered_pages || 0), 0);
+      const coverChapterId = chList[0]?.id || "";
+      const latestCreated = chList.reduce((latest, c) => {
+        if (!latest) return c.created_at;
+        if (!c.created_at) return latest;
+        return new Date(c.created_at) > new Date(latest) ? c.created_at : latest;
+      }, chList[0]?.created_at || null);
+
+      list.push({
+        title,
+        chapters: chList,
+        totalChapters: chList.length,
+        totalPages,
+        totalRenderedPages: totalRendered,
+        coverChapterId,
+        latestCreatedAt: latestCreated,
+      });
+    });
+
+    return list;
+  }, [savedChapters]);
+
+  const filteredSeries = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return seriesList.filter((s) => {
+      const titleMatch = s.title.toLowerCase().includes(q);
+      const chapterMatch = s.chapters.some((c) => (c.chapter_number || "1").toLowerCase().includes(q));
+      if (q && !titleMatch && !chapterMatch) return false;
+      if (filterStatus === "done") {
+        return s.totalRenderedPages === s.totalPages && s.totalPages > 0;
+      }
+      return true;
+    });
+  }, [seriesList, searchQuery, filterStatus]);
+
+  // Drawer Chapters with internal search & sorting
+  const drawerChapters = useMemo(() => {
+    if (!selectedSeries) return [];
+    const current = seriesList.find((s) => s.title.toLowerCase() === selectedSeries.title.toLowerCase()) || selectedSeries;
+    let list = [...current.chapters];
+
+    const q = drawerSearchQuery.toLowerCase().trim();
+    if (q) {
+      list = list.filter(
+        (c) =>
+          (c.chapter_number || "").toLowerCase().includes(q) ||
+          (c.title || "").toLowerCase().includes(q)
+      );
+    }
+
+    list.sort((a, b) => {
+      const numA = parseFloat((a.chapter_number || "0").replace(/[^\d.]/g, "")) || 0;
+      const numB = parseFloat((b.chapter_number || "0").replace(/[^\d.]/g, "")) || 0;
+      return drawerSortOrder === "asc" ? numA - numB : numB - numA;
+    });
+
+    return list;
+  }, [selectedSeries, seriesList, drawerSearchQuery, drawerSortOrder]);
+
+  // Rename handlers
+  const handleOpenRename = (target: RenameTarget) => {
+    setRenameTarget(target);
+    setNewTitleInput(target.currentTitle);
+    setNewChapterNumInput(target.currentChapterNumber || "");
+  };
+
+  const handleConfirmRename = async () => {
+    if (!renameTarget) return;
+    const trimmedTitle = newTitleInput.trim();
+    if (!trimmedTitle) return;
+
+    setIsRenaming(true);
+    try {
+      if (renameTarget.type === "series") {
+        const oldTitle = renameTarget.oldTitle || renameTarget.currentTitle;
+        const resp = await fetch(`${BACKEND_URL}/api/chapters/series/rename`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            old_title: oldTitle,
+            new_title: trimmedTitle,
+          }),
+        });
+        if (resp.ok) {
+          setSavedChapters((prev) =>
+            prev.map((c) =>
+              (c.title || "Untitled Manga").trim().toLowerCase() === oldTitle.trim().toLowerCase()
+                ? { ...c, title: trimmedTitle }
+                : c
+            )
+          );
+          if (selectedSeries && selectedSeries.title.toLowerCase() === oldTitle.toLowerCase()) {
+            setSelectedSeries((prev) => (prev ? { ...prev, title: trimmedTitle } : null));
+          }
+          if (chapterData && (chapterData.title || "").toLowerCase() === oldTitle.toLowerCase()) {
+            setChapterData((prev) => (prev ? { ...prev, title: trimmedTitle } : null));
+          }
+        } else {
+          alert("Gagal mengubah nama seri.");
+        }
+      } else if (renameTarget.type === "chapter" && renameTarget.id) {
+        const trimmedChNum = newChapterNumInput.trim();
+        const resp = await fetch(`${BACKEND_URL}/api/chapters/${renameTarget.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: trimmedTitle,
+            chapter_number: trimmedChNum || undefined,
+          }),
+        });
+        if (resp.ok) {
+          setSavedChapters((prev) =>
+            prev.map((c) =>
+              c.id === renameTarget.id
+                ? { ...c, title: trimmedTitle, chapter_number: trimmedChNum || c.chapter_number }
+                : c
+            )
+          );
+          if (selectedSeries) {
+            setSelectedSeries((prev) => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                chapters: prev.chapters.map((c) =>
+                  c.id === renameTarget.id
+                    ? { ...c, title: trimmedTitle, chapter_number: trimmedChNum || c.chapter_number }
+                    : c
+                ),
+              };
+            });
+          }
+          if (chapterData && chapterData.id === renameTarget.id) {
+            setChapterData((prev) =>
+              prev ? { ...prev, title: trimmedTitle, chapter_number: trimmedChNum || prev.chapter_number } : null
+            );
+          }
+        } else {
+          alert("Gagal mengubah nama bab.");
+        }
+      }
+    } catch (err) {
+      console.error("Rename error:", err);
+      alert("Terjadi kesalahan saat mengubah nama.");
+    } finally {
+      setIsRenaming(false);
+      setRenameTarget(null);
+    }
+  };
+
+  // Delete handler
+  const confirmDeleteAction = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/chapters/${deleteTarget.id}`, {
-        method: "DELETE",
-      });
-      if (resp.ok) {
-        setSavedChapters((prev) => prev.filter((c) => c.id !== deleteTarget.id));
-        if (deleteTarget.redirectHome) {
-          if (typeof window !== "undefined") {
-            window.history.pushState({}, "", window.location.pathname);
+      if (deleteTarget.type === "series") {
+        const resp = await fetch(`${BACKEND_URL}/api/chapters/series/delete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ series_title: deleteTarget.title }),
+        });
+        if (resp.ok) {
+          setSavedChapters((prev) =>
+            prev.filter(
+              (c) => (c.title || "Untitled Manga").trim().toLowerCase() !== deleteTarget.title.trim().toLowerCase()
+            )
+          );
+          if (selectedSeries && selectedSeries.title.toLowerCase() === deleteTarget.title.toLowerCase()) {
+            setSelectedSeries(null);
           }
-          setView("home");
+        } else {
+          alert("Gagal menghapus seri manga.");
         }
-      } else {
-        alert("Gagal menghapus bab.");
+      } else if (deleteTarget.id) {
+        const resp = await fetch(`${BACKEND_URL}/api/chapters/${deleteTarget.id}`, {
+          method: "DELETE",
+        });
+        if (resp.ok) {
+          setSavedChapters((prev) => prev.filter((c) => c.id !== deleteTarget.id));
+          if (deleteTarget.redirectHome) {
+            if (typeof window !== "undefined") {
+              window.history.pushState({}, "", window.location.pathname);
+            }
+            setView("home");
+          }
+        } else {
+          alert("Gagal menghapus bab.");
+        }
       }
     } catch (err) {
-      console.error("Delete chapter error:", err);
-      alert("Terjadi kesalahan saat menghapus bab.");
+      console.error("Delete error:", err);
+      alert("Terjadi kesalahan saat menghapus.");
     } finally {
       setIsDeleting(false);
       setDeleteTarget(null);
@@ -332,16 +562,6 @@ export default function MangaIDApp() {
   const removePage = (index: number) => {
     setReviewPages(reviewPages.filter((_, i) => i !== index));
   };
-
-  const filteredChapters = savedChapters.filter((ch) => {
-    const titleMatch = (ch.title || "Untitled Manga").toLowerCase().includes(searchQuery.toLowerCase());
-    const chapterMatch = (ch.chapter_number || "1").toLowerCase().includes(searchQuery.toLowerCase());
-    if (searchQuery.trim() && !titleMatch && !chapterMatch) return false;
-    if (filterStatus === "done") {
-      return ch.rendered_pages === ch.total_pages && ch.total_pages > 0;
-    }
-    return true;
-  });
 
   return (
     <div className="min-h-screen bg-[#0D0D0E] text-[#ECE9E2]">
@@ -725,29 +945,29 @@ export default function MangaIDApp() {
                 )}
               </div>
 
-              {/* Bab Tersimpan Shelf */}
+              {/* Koleksi Seri Manga Shelf */}
               <div id="bab-tersimpan-section" className="space-y-4 pt-2">
                 {/* Header Row: Title on Left, Search + Filter on Right */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-baseline gap-2">
                     <h2 className="font-display text-lg font-bold text-[#ECE9E2]">
-                      Bab Tersimpan
+                      Koleksi Seri Manga
                     </h2>
                     <span className="font-mono text-xs text-[#8E8B84]">
-                      ({filteredChapters.length} bab{searchQuery ? " ditemukan" : " tersedia"})
+                      ({filteredSeries.length} seri • {savedChapters.length} total bab)
                     </span>
                   </div>
 
-                  {/* Search and Dropdown Filter (Matching user screenshot) */}
+                  {/* Search and Dropdown Filter */}
                   <div className="flex items-center gap-2">
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 text-[#8E8B84] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.5} />
                       <input
                         type="text"
-                        placeholder="Cari chapter..."
+                        placeholder="Cari judul seri manga..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#151516] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60 w-44 sm:w-56 transition-colors"
+                        className="pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#151516] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60 w-48 sm:w-60 transition-colors"
                       />
                       {searchQuery && (
                         <button
@@ -770,61 +990,82 @@ export default function MangaIDApp() {
                   </div>
                 </div>
 
-                {/* Grid of Manga Covers */}
-                {filteredChapters.length > 0 ? (
+                {/* Grid of Series Master Cards */}
+                {filteredSeries.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
-                    {filteredChapters.map((ch) => (
+                    {filteredSeries.map((series) => (
                       <div
-                        key={ch.id}
+                        key={series.title}
                         className="group flex flex-col bg-[#151516] border border-[#2A2A2C] rounded-[6px] overflow-hidden hover:border-[#8E8B84]/60 transition-colors"
                       >
                         {/* 2:3 Cover Thumbnail */}
-                        <div className="aspect-[2/3] bg-[#1C1C1E] relative overflow-hidden flex items-center justify-center">
+                        <div
+                          onClick={() => setSelectedSeries(series)}
+                          className="aspect-[2/3] bg-[#1C1C1E] relative overflow-hidden flex items-center justify-center cursor-pointer"
+                        >
                           <img
-                            src={`${BACKEND_URL}/api/chapters/${ch.id}/pages/1/original`}
-                            alt={ch.title || "Cover"}
+                            src={`${BACKEND_URL}/api/chapters/${series.coverChapterId}/pages/1/original`}
+                            alt={series.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = "none";
                             }}
                           />
-                          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] bg-[#0D0D0E]/85 border border-[#2A2A2C] font-mono text-[10px] text-[#ECE9E2]">
-                            {ch.rendered_pages}/{ch.total_pages} hal
+                          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] bg-[#0D0D0E]/85 border border-[#2A2A2C] font-mono text-[10px] text-[#ECE9E2] flex items-center gap-1 shadow-sm">
+                            <Layers className="w-3 h-3 text-[#E8452C]" />
+                            <span>{series.totalChapters} Bab</span>
                           </div>
                         </div>
 
                         <div className="p-3 flex-1 flex flex-col justify-between">
                           <div>
-                            <h4 className="font-display text-xs font-bold text-[#ECE9E2] truncate">
-                              {ch.title || "Untitled Manga"}
-                            </h4>
+                            <div className="flex items-center justify-between gap-1">
+                              <h4
+                                onClick={() => setSelectedSeries(series)}
+                                className="font-display text-xs font-bold text-[#ECE9E2] truncate flex-1 cursor-pointer hover:text-[#E8452C] transition-colors"
+                                title={series.title}
+                              >
+                                {series.title}
+                              </h4>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenRename({
+                                    type: "series",
+                                    oldTitle: series.title,
+                                    currentTitle: series.title,
+                                  });
+                                }}
+                                className="text-[#8E8B84] hover:text-[#ECE9E2] p-0.5 transition-colors cursor-pointer"
+                                title="Ubah Nama Seri"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            </div>
                             <div className="font-mono text-[11px] text-[#8E8B84] mt-0.5">
-                              Bab {ch.chapter_number || "1"} • {ch.language_source.toLowerCase() === "id" ? "Bahasa Indonesia" : `${ch.language_source.toUpperCase()} → ID`}
+                              {series.totalRenderedPages}/{series.totalPages} hal selesai
                             </div>
                           </div>
 
                           <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-[#2A2A2C]">
                             <button
-                              onClick={() => fetchChapter(ch.id)}
-                              className="flex-1 min-h-[36px] py-1.5 px-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold text-center transition-colors cursor-pointer"
+                              onClick={() => setSelectedSeries(series)}
+                              className="flex-1 min-h-[36px] py-1.5 px-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                             >
-                              Baca
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>Buka Bab ({series.totalChapters})</span>
                             </button>
-                            <a
-                              href={`${BACKEND_URL}/api/chapters/${ch.id}/pdf`}
-                              download
-                              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-[6px] border border-[#2A2A2C] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] transition-colors"
-                              title="Unduh PDF"
-                            >
-                              <Download className="w-3.5 h-3.5" strokeWidth={1.5} />
-                            </a>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setDeleteTarget({ id: ch.id, title: ch.title || `Bab ${ch.chapter_number || "1"}` });
+                                setDeleteTarget({
+                                  type: "series",
+                                  title: series.title,
+                                  count: series.totalChapters,
+                                });
                               }}
                               className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-[6px] border border-[#2A2A2C] hover:border-[#D4493E]/60 hover:bg-[#D4493E]/10 text-[#8E8B84] hover:text-[#D4493E] transition-colors cursor-pointer"
-                              title="Hapus Bab"
+                              title="Hapus Seluruh Seri"
                             >
                               <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
                             </button>
@@ -835,7 +1076,7 @@ export default function MangaIDApp() {
                   </div>
                 ) : (
                   <div className="p-8 text-center rounded-[6px] border border-[#2A2A2C] bg-[#151516] text-[#8E8B84] text-xs">
-                    {searchQuery ? `Tidak ada bab yang cocok dengan kata kunci "${searchQuery}".` : "Belum ada bab yang tersimpan."}
+                    {searchQuery ? `Tidak ada seri manga yang cocok dengan kata kunci "${searchQuery}".` : "Belum ada manga yang tersimpan."}
                   </div>
                 )}
               </div>
@@ -1013,9 +1254,25 @@ export default function MangaIDApp() {
                   <span>Kembali</span>
                 </button>
                 <div className="h-3.5 w-px bg-[#2A2A2C] flex-shrink-0" />
-                <h3 className="font-display font-bold text-[#ECE9E2] text-xs truncate max-w-[140px] sm:max-w-xs md:max-w-md">
-                  {chapterData.title || "Manga"} — Bab {chapterData.chapter_number || "1"}
-                </h3>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <h3 className="font-display font-bold text-[#ECE9E2] text-xs truncate max-w-[140px] sm:max-w-xs md:max-w-md">
+                    {chapterData.title || "Manga"} — Bab {chapterData.chapter_number || "1"}
+                  </h3>
+                  <button
+                    onClick={() =>
+                      handleOpenRename({
+                        type: "chapter",
+                        id: chapterData.id,
+                        currentTitle: chapterData.title || "",
+                        currentChapterNumber: chapterData.chapter_number || "1",
+                      })
+                    }
+                    className="p-1 rounded text-[#8E8B84] hover:text-[#ECE9E2] hover:bg-[#1C1C1E] transition-colors cursor-pointer flex-shrink-0"
+                    title="Ganti Nama / Nomor Bab"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -1058,6 +1315,7 @@ export default function MangaIDApp() {
                 <button
                   onClick={() =>
                     setDeleteTarget({
+                      type: "chapter",
                       id: chapterData.id,
                       title: chapterData.title || `Bab ${chapterData.chapter_number || "1"}`,
                       redirectHome: true,
@@ -1200,26 +1458,294 @@ export default function MangaIDApp() {
         </div>
       )}
 
+      {/* Chapter Drawer / Modal */}
+      {selectedSeries && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-t-xl sm:rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom duration-200">
+            {/* Drawer Header */}
+            <div className="p-4 sm:p-5 border-b border-[#2A2A2C] flex items-center justify-between gap-3 bg-[#111112]">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display text-base sm:text-lg font-bold text-[#ECE9E2] truncate">
+                    {selectedSeries.title}
+                  </h3>
+                  <button
+                    onClick={() =>
+                      handleOpenRename({
+                        type: "series",
+                        oldTitle: selectedSeries.title,
+                        currentTitle: selectedSeries.title,
+                      })
+                    }
+                    className="p-1.5 rounded-[4px] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer flex-shrink-0"
+                    title="Ganti Nama Seri Manga"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-xs text-[#8E8B84] mt-0.5 flex items-center gap-2">
+                  <span>{selectedSeries.totalChapters} Bab Tersimpan</span>
+                  <span>•</span>
+                  <span>{selectedSeries.totalPages} Total Halaman</span>
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setSelectedSeries(null);
+                  setDrawerSearchQuery("");
+                }}
+                className="w-8 h-8 rounded-[6px] border border-[#2A2A2C] flex items-center justify-center text-[#8E8B84] hover:text-[#ECE9E2] hover:bg-[#1C1C1E] transition-colors cursor-pointer flex-shrink-0"
+                title="Tutup"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drawer Filter / Toolbar */}
+            <div className="p-3 sm:px-5 sm:py-3 border-b border-[#2A2A2C] bg-[#151516] flex items-center gap-2.5">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#8E8B84]" />
+                <input
+                  type="text"
+                  placeholder="Cari nomor bab (misal: 120)..."
+                  value={drawerSearchQuery}
+                  onChange={(e) => setDrawerSearchQuery(e.target.value)}
+                  className="w-full bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] pl-8 pr-3 py-1.5 text-xs text-[#ECE9E2] placeholder-[#8E8B84] focus:outline-none focus:border-[#E8452C]"
+                />
+                {drawerSearchQuery && (
+                  <button
+                    onClick={() => setDrawerSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8E8B84] hover:text-[#ECE9E2]"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                onClick={() => setDrawerSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#E8452C] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer flex-shrink-0"
+                title="Ubah urutan bab"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Urut:</span>
+                <span>{drawerSortOrder === "asc" ? "1 → N" : "N → 1"}</span>
+              </button>
+            </div>
+
+            {/* Chapters List */}
+            <div className="flex-1 overflow-y-auto divide-y divide-[#2A2A2C]/60 p-2 sm:p-3 max-h-[55vh]">
+              {drawerChapters.length > 0 ? (
+                drawerChapters.map((ch) => (
+                  <div
+                    key={ch.id}
+                    className="flex items-center justify-between p-2.5 sm:px-3 hover:bg-[#1C1C1E]/70 rounded-[6px] transition-colors gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-[4px] bg-[#E8452C]/10 border border-[#E8452C]/30 text-[#E8452C] text-xs font-mono font-semibold">
+                          Bab {ch.chapter_number || "1"}
+                        </span>
+                        <span className="text-xs text-[#8E8B84] truncate">
+                          {ch.title || selectedSeries.title}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-[11px] text-[#8E8B84] font-mono">
+                        <span>{ch.rendered_pages || 0}/{ch.total_pages || 0} Hal</span>
+                        {ch.created_at && (
+                          <span>• {new Date(ch.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          setSelectedSeries(null);
+                          fetchChapter(ch.id);
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-[5px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span>Baca</span>
+                      </button>
+
+                      <a
+                        href={`${BACKEND_URL}/api/chapters/${ch.id}/pdf`}
+                        download
+                        className="p-1.5 rounded-[5px] border border-[#2A2A2C] bg-[#151516] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] transition-colors"
+                        title="Unduh PDF"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </a>
+
+                      <button
+                        onClick={() =>
+                          handleOpenRename({
+                            type: "chapter",
+                            id: ch.id,
+                            currentTitle: ch.title || selectedSeries.title,
+                            currentChapterNumber: ch.chapter_number || "1",
+                          })
+                        }
+                        className="p-1.5 rounded-[5px] border border-[#2A2A2C] bg-[#151516] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                        title="Ganti Nama / Nomor Bab"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          setDeleteTarget({
+                            type: "chapter",
+                            id: ch.id,
+                            title: `${selectedSeries.title} — Bab ${ch.chapter_number || "1"}`,
+                          })
+                        }
+                        className="p-1.5 rounded-[5px] border border-[#2A2A2C] bg-[#151516] hover:border-[#D4493E]/60 hover:bg-[#D4493E]/10 text-[#8E8B84] hover:text-[#D4493E] transition-colors cursor-pointer"
+                        title="Hapus Bab Ini"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-xs text-[#8E8B84]">
+                  {drawerSearchQuery
+                    ? `Tidak ada bab yang cocok dengan "${drawerSearchQuery}".`
+                    : "Belum ada bab dalam seri ini."}
+                </div>
+              )}
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="p-3 sm:px-5 border-t border-[#2A2A2C] bg-[#111112] flex items-center justify-between">
+              <span className="text-xs text-[#8E8B84]">
+                Menampilkan {drawerChapters.length} dari {selectedSeries.totalChapters} bab
+              </span>
+              <button
+                onClick={() => {
+                  setSelectedSeries(null);
+                  setDrawerSearchQuery("");
+                }}
+                className="px-4 py-1.5 rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Modal */}
+      {renameTarget && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-md w-full p-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-[6px] bg-[#E8452C]/10 border border-[#E8452C]/30 flex items-center justify-center text-[#E8452C] flex-shrink-0">
+                <Pencil className="w-4 h-4" strokeWidth={1.8} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-display text-sm font-bold text-[#ECE9E2]">
+                  {renameTarget.type === "series" ? "Ganti Nama Seri Manga" : "Ganti Judul / Nomor Bab"}
+                </h3>
+                <p className="text-xs text-[#8E8B84]">
+                  {renameTarget.type === "series"
+                    ? "Perubahan nama seri akan otomatis diterapkan ke seluruh bab dalam grup ini."
+                    : "Atur nomor dan grup manga agar tertata rapi di rak buku."}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 mb-5">
+              {renameTarget.type === "chapter" && (
+                <div>
+                  <label className="block text-xs font-semibold text-[#ECE9E2] mb-1">
+                    Nomor Bab (Contoh: 1, 12.5, 126)
+                  </label>
+                  <input
+                    type="text"
+                    value={newChapterNumInput}
+                    onChange={(e) => setNewChapterNumInput(e.target.value)}
+                    placeholder="Contoh: 1"
+                    className="w-full bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] px-3 py-2 text-xs text-[#ECE9E2] placeholder-[#8E8B84] focus:outline-none focus:border-[#E8452C]"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#ECE9E2] mb-1">
+                  {renameTarget.type === "series" ? "Nama Seri Baru" : "Nama Seri Manga (Grup)"}
+                </label>
+                <input
+                  type="text"
+                  value={newTitleInput}
+                  onChange={(e) => setNewTitleInput(e.target.value)}
+                  placeholder="Masukkan judul manga..."
+                  className="w-full bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] px-3 py-2 text-xs text-[#ECE9E2] placeholder-[#8E8B84] focus:outline-none focus:border-[#E8452C]"
+                />
+                {renameTarget.type === "chapter" && (
+                  <p className="text-[11px] text-[#8E8B84] mt-1">
+                    Jika diubah ke nama grup yang berbeda, bab ini akan berpindah ke rak seri tersebut.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setRenameTarget(null)}
+                disabled={isRenaming}
+                className="px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmRename}
+                disabled={isRenaming || !newTitleInput.trim()}
+                className="px-4 py-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] disabled:bg-[#1C1C1E] disabled:text-[#8E8B84] font-semibold text-xs text-white transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {isRenaming ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Simpan Perubahan</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-sm w-full p-5 shadow-2xl relative">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-sm w-full p-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 rounded-[6px] bg-[#D4493E]/10 border border-[#D4493E]/30 flex items-center justify-center text-[#D4493E] flex-shrink-0">
                 <Trash2 className="w-4 h-4" strokeWidth={1.8} />
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="font-display text-sm font-bold text-[#ECE9E2]">
-                  Hapus Bab Ini?
+                  {deleteTarget.type === "series" ? "Hapus Seluruh Seri?" : "Hapus Bab Ini?"}
                 </h3>
                 <p className="text-xs text-[#8E8B84] truncate">
-                  {deleteTarget.title || "Bab Terpilih"}
+                  {deleteTarget.title || "Target Terpilih"}
                 </p>
               </div>
             </div>
 
             <p className="text-xs text-[#8E8B84] mb-5 leading-relaxed">
-              Bab ini beserta seluruh file gambar terjemahan dan berkas PDF akan dihapus permanen dari penyimpanan lokal.
+              {deleteTarget.type === "series"
+                ? `Semua ${deleteTarget.count ? `${deleteTarget.count} ` : ""}bab dalam manga ini beserta seluruh gambar terjemahan dan PDF akan dihapus permanen.`
+                : "Bab ini beserta seluruh file gambar terjemahan dan berkas PDF akan dihapus permanen dari penyimpanan lokal."}
             </p>
 
             <div className="flex items-center justify-end gap-2">
@@ -1231,7 +1757,7 @@ export default function MangaIDApp() {
                 Batal
               </button>
               <button
-                onClick={confirmDeleteChapter}
+                onClick={confirmDeleteAction}
                 disabled={isDeleting}
                 className="px-4 py-2 rounded-[6px] bg-[#D4493E] hover:bg-[#E8452C] font-semibold text-xs text-white transition-colors cursor-pointer flex items-center gap-1.5"
               >

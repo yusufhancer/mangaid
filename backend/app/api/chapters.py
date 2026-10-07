@@ -59,6 +59,59 @@ def list_chapters(db: Session = Depends(get_db)):
         ))
     return res
 
+class ChapterUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    chapter_number: Optional[str] = None
+
+class SeriesRenameRequest(BaseModel):
+    old_title: str
+    new_title: str
+
+class SeriesDeleteRequest(BaseModel):
+    series_title: str
+
+@router.patch("/series/rename")
+def rename_series(payload: SeriesRenameRequest, db: Session = Depends(get_db)):
+    new_title_clean = payload.new_title.strip()
+    if not new_title_clean:
+        raise HTTPException(status_code=400, detail="New title cannot be empty.")
+
+    chapters = db.query(Chapter).filter(Chapter.title == payload.old_title).all()
+    if not chapters:
+        chapters = db.query(Chapter).filter(Chapter.title.ilike(payload.old_title)).all()
+
+    for c in chapters:
+        c.title = new_title_clean
+
+    db.commit()
+    return {
+        "message": f"Updated {len(chapters)} chapters in series.",
+        "old_title": payload.old_title,
+        "new_title": new_title_clean,
+        "updated_count": len(chapters)
+    }
+
+@router.post("/series/delete")
+def delete_series(payload: SeriesDeleteRequest, db: Session = Depends(get_db)):
+    chapters = db.query(Chapter).filter(Chapter.title == payload.series_title).all()
+    if not chapters:
+        chapters = db.query(Chapter).filter(Chapter.title.ilike(payload.series_title)).all()
+
+    if not chapters:
+        raise HTTPException(status_code=404, detail="Series not found.")
+
+    count = 0
+    for chapter in chapters:
+        chapter_dir = settings.data_path / "chapters" / chapter.id
+        if chapter_dir.exists():
+            shutil.rmtree(chapter_dir, ignore_errors=True)
+        db.query(Job).filter(Job.chapter_id == chapter.id).delete()
+        db.delete(chapter)
+        count += 1
+
+    db.commit()
+    return {"message": f"Deleted {count} chapters in series '{payload.series_title}'."}
+
 @router.get("/{chapter_id}", response_model=ChapterDetailResponse)
 def get_chapter_detail(chapter_id: str, db: Session = Depends(get_db)):
     chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
@@ -186,3 +239,24 @@ def delete_chapter(chapter_id: str, db: Session = Depends(get_db)):
     db.delete(chapter)
     db.commit()
     return {"message": "Chapter deleted successfully."}
+
+@router.patch("/{chapter_id}")
+def update_chapter(chapter_id: str, payload: ChapterUpdateRequest, db: Session = Depends(get_db)):
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found.")
+
+    if payload.title is not None and payload.title.strip():
+        chapter.title = payload.title.strip()
+    if payload.chapter_number is not None and payload.chapter_number.strip():
+        chapter.chapter_number = payload.chapter_number.strip()
+
+    db.commit()
+    db.refresh(chapter)
+    return {
+        "message": "Chapter updated successfully.",
+        "id": chapter.id,
+        "title": chapter.title,
+        "chapter_number": chapter.chapter_number
+    }
+
