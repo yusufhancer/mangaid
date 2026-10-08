@@ -901,11 +901,13 @@ export default function MangaIDApp() {
                 setView("home");
                 if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              className="flex items-center gap-2.5 px-3 py-2 cursor-pointer"
+              className="flex items-center gap-2.5 px-3 py-2 cursor-pointer group"
             >
-              <div className="w-7 h-7 rounded-[4px] bg-[#E8452C] flex items-center justify-center font-bold text-white text-xs">
-                ID
-              </div>
+              <img
+                src="/logo.png"
+                alt="MangaID Logo"
+                className="w-7 h-7 rounded-[6px] object-cover border border-[#2A2A2C] group-hover:border-[#E8452C] transition-colors shadow-sm"
+              />
               <span className="font-display text-xl font-bold tracking-tight text-[#ECE9E2]">
                 MangaID
               </span>
@@ -1002,9 +1004,11 @@ export default function MangaIDApp() {
               onClick={() => setView("home")}
               className="flex items-center gap-2 cursor-pointer select-none"
             >
-              <div className="w-6 h-6 rounded-[4px] bg-[#E8452C] flex items-center justify-center font-bold text-white text-[11px]">
-                ID
-              </div>
+              <img
+                src="/logo.png"
+                alt="MangaID Logo"
+                className="w-6 h-6 rounded-[5px] object-cover border border-[#2A2A2C]"
+              />
               <span className="font-display text-lg font-bold text-[#ECE9E2]">MangaID</span>
             </div>
 
@@ -1140,9 +1144,11 @@ export default function MangaIDApp() {
               {!isAppInstalled && showInstallBanner && (
                 <div className="p-4 rounded-[8px] bg-gradient-to-r from-[#1C1312] via-[#151516] to-[#151516] border border-[#E8452C]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-[8px] bg-[#E8452C]/15 border border-[#E8452C]/40 flex items-center justify-center shrink-0">
-                      <Smartphone className="w-5 h-5 text-[#E8452C]" />
-                    </div>
+                    <img
+                      src="/logo.png"
+                      alt="MangaID Logo"
+                      className="w-11 h-11 rounded-[8px] object-cover border border-[#E8452C]/40 shadow-sm shrink-0"
+                    />
                     <div>
                       <div className="text-sm font-semibold text-[#ECE9E2] flex items-center gap-2">
                         <span>Pasang MangaID di Layar Utama HP / Laptop</span>
