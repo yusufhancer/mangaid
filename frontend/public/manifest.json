@@ -1,0 +1,51 @@
+{
+  "name": "MangaID — Universal Manga Translator",
+  "short_name": "MangaID",
+  "description": "Baca manga dan manhwa apa pun dalam bahasa Indonesia secara instan.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0D0D0E",
+  "theme_color": "#0D0D0E",
+  "categories": [
+    "entertainment",
+    "books",
+    "comics"
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Beranda MangaID",
+      "short_name": "Beranda",
+      "description": "Buka rak komik dan cari chapter manga",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

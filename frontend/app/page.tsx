@@ -30,6 +30,7 @@ import {
   Columns,
   Rows,
   Home,
+  Smartphone,
 } from "lucide-react";
 
 const BACKEND_URL = "";
@@ -197,6 +198,11 @@ export default function MangaIDApp() {
   const [readerMode, setReaderMode] = useState<"vertical" | "single">("vertical");
   const [singlePageIdx, setSinglePageIdx] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // PWA states
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
 
   // Quick test URL
   const SAMPLE_URL = "https://mangadex.org/chapter/e9cfaece-daa1-4830-b239-2d09c407b56b/6";
@@ -432,6 +438,59 @@ export default function MangaIDApp() {
       }
     } catch (err) {
       console.error("Fetch saved chapters error:", err);
+    }
+  };
+
+  // PWA & Install prompt handling
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Check if app is running in standalone mode (already installed)
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone === true;
+    if (isStandalone) {
+      setIsAppInstalled(true);
+    }
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredPrompt(null);
+      setShowInstallBanner(false);
+      console.log("[MangaID PWA] App was successfully installed!");
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallPWA = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") {
+        setIsAppInstalled(true);
+        setShowInstallBanner(false);
+      }
+      setDeferredPrompt(null);
+    } else {
+      alert(
+        "Petunjuk Pemasangan Aplikasi MangaID:\n\n" +
+        "• Android (Chrome): Buka menu browser (titik 3 di kanan atas) lalu pilih 'Install aplikasi' atau 'Tambahkan ke Layar Utama'.\n" +
+        "• iPhone / iPad (Safari): Klik tombol Bagikan (ikon kotak dengan panah ke atas di bawah) lalu pilih 'Tambah ke Layar Utama' (Add to Home Screen).\n" +
+        "• Laptop / PC (Chrome / Edge): Klik ikon Pasang / Install (di bilah URL kanan atas)."
+      );
     }
   };
 
@@ -893,6 +952,22 @@ export default function MangaIDApp() {
 
           {/* Sidebar Footer */}
           <div className="pt-4 border-t border-[#2A2A2C] space-y-2">
+            {!isAppInstalled && (
+              <button
+                onClick={handleInstallPWA}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-[6px] text-xs font-medium bg-[#E8452C]/10 border border-[#E8452C]/30 text-[#FF5A40] hover:bg-[#E8452C]/20 transition-all cursor-pointer group"
+                title="Pasang aplikasi MangaID ke perangkat Anda"
+              >
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-[#E8452C] group-hover:scale-110 transition-transform" />
+                  <span>Install MangaID</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E8452C] text-white font-mono font-bold tracking-wider">
+                  PWA
+                </span>
+              </button>
+            )}
+
             <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[#8E8B84]">
               <FolderArchive className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span>Penyimpanan Lokal ({savedChapters.length} Bab)</span>
@@ -924,13 +999,26 @@ export default function MangaIDApp() {
               <span className="font-display text-lg font-bold text-[#ECE9E2]">MangaID</span>
             </div>
 
-            <button
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-1.5 text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] px-2.5 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#151516] cursor-pointer"
-            >
-              <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
-              <span>Gaya: <strong className="text-[#ECE9E2] capitalize">{tone}</strong></span>
-            </button>
+            <div className="flex items-center gap-2">
+              {!isAppInstalled && (
+                <button
+                  onClick={handleInstallPWA}
+                  className="flex items-center gap-1.5 text-xs font-mono text-[#FF5A40] bg-[#E8452C]/10 border border-[#E8452C]/30 px-2.5 py-1.5 rounded-[6px] cursor-pointer hover:bg-[#E8452C]/20 active:scale-95 transition-all"
+                  title="Pasang aplikasi MangaID ke ponsel"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>Install</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => setShowSettings(true)}
+                className="flex items-center gap-1.5 text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] px-2.5 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#151516] cursor-pointer"
+              >
+                <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
+                <span>Gaya: <strong className="text-[#ECE9E2] capitalize">{tone}</strong></span>
+              </button>
+            </div>
           </header>
         )}
 
@@ -1039,6 +1127,43 @@ export default function MangaIDApp() {
           {/* VIEW 1: HOME */}
           {view === "home" && (
             <main className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-7xl w-full mx-auto flex flex-col">
+              {/* PWA Install Notification Banner */}
+              {!isAppInstalled && showInstallBanner && (
+                <div className="p-4 rounded-[8px] bg-gradient-to-r from-[#1C1312] via-[#151516] to-[#151516] border border-[#E8452C]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-[8px] bg-[#E8452C]/15 border border-[#E8452C]/40 flex items-center justify-center shrink-0">
+                      <Smartphone className="w-5 h-5 text-[#E8452C]" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-[#ECE9E2] flex items-center gap-2">
+                        <span>Pasang MangaID di Layar Utama HP / Laptop</span>
+                        <span className="text-[10px] bg-[#E8452C] text-white font-mono px-1.5 py-0.5 rounded font-bold">
+                          PWA
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#8E8B84] mt-0.5">
+                        Baca manga layar penuh tanpa address bar browser, akses instan, dan lebih ringan.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                    <button
+                      onClick={() => setShowInstallBanner(false)}
+                      className="text-xs text-[#8E8B84] hover:text-[#ECE9E2] px-3 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] cursor-pointer"
+                    >
+                      Nanti Saja
+                    </button>
+                    <button
+                      onClick={handleInstallPWA}
+                      className="text-xs font-semibold text-white bg-[#E8452C] hover:bg-[#FF5A40] px-4 py-1.5 rounded-[6px] transition-colors flex items-center gap-1.5 shadow-md shadow-[#E8452C]/20 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Install Sekarang
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Card Box Workspace (The one user loved!) */}
               <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] p-5 sm:p-6 shadow-sm">
                 {/* Top Toolbar inside Card */}
@@ -2263,6 +2388,16 @@ export default function MangaIDApp() {
                   <div>• Unduh PDF bab komik</div>
                   <div>• Switch teks terjemahan vs asli</div>
                 </div>
+              </div>
+
+              <div className="bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] p-3.5 space-y-1.5">
+                <div className="font-semibold text-[#ECE9E2] flex items-center gap-1.5">
+                  <Smartphone className="w-3.5 h-3.5 text-[#E8452C]" />
+                  <span>Aplikasi MangaID (PWA / Download):</span>
+                </div>
+                <p className="text-xs text-[#8E8B84] leading-relaxed">
+                  Web ini mendukung Progressive Web App (PWA). Anda dapat menginstall MangaID langsung ke layar utama HP (Android/iOS) atau Laptop/PC untuk membaca fullscreen tanpa browser bar dan performa lebih kencang.
+                </p>
               </div>
             </div>
 
