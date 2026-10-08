@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   title: "MangaID — Universal Manga Translator",
   description: "Baca manga dan manhwa apa pun dalam bahasa Indonesia.",
   manifest: "/manifest.json",
+  referrer: "no-referrer",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -39,6 +40,7 @@ export default function RootLayout({
   return (
     <html lang="id" className="dark">
       <head>
+        <meta name="referrer" content="no-referrer" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-touch-fullscreen" content="yes" />
       </head>

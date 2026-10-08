@@ -1,4 +1,5 @@
 import httpx
+from urllib.parse import quote
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -88,7 +89,8 @@ async def search_manga(
                 if rel.get("type") == "cover_art":
                     file_name = rel.get("attributes", {}).get("fileName")
                     if file_name:
-                        cover_url = f"https://uploads.mangadex.org/covers/{m_id}/{file_name}.256.jpg"
+                        raw_cover = f"https://uploads.mangadex.org/covers/{m_id}/{file_name}.256.jpg"
+                        cover_url = f"/api/proxy/image?url={quote(raw_cover, safe='')}"
                     break
 
             results.append(ExplorerMangaItem(

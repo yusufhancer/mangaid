@@ -35,6 +35,15 @@ import {
 
 const BACKEND_URL = "";
 
+const resolveProxyImage = (url: string | null | undefined): string => {
+  if (!url) return "";
+  if (url.startsWith("/api/") || url.startsWith("data:")) return url;
+  if (url.includes("mangadex.org") || url.includes("mangadex.network")) {
+    return `/api/proxy/image?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+};
+
 interface PageItem {
   page_number: number;
   image_url: string;
@@ -1437,9 +1446,10 @@ export default function MangaIDApp() {
                               <div className="aspect-[3/4] relative bg-[#1C1C1E] overflow-hidden">
                                 {manga.cover_url ? (
                                   <img
-                                    src={manga.cover_url}
+                                    src={resolveProxyImage(manga.cover_url)}
                                     alt={manga.title}
                                     loading="lazy"
+                                    referrerPolicy="no-referrer"
                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                     onError={(e) => {
                                       (e.target as HTMLElement).style.display = "none";
@@ -1687,10 +1697,11 @@ export default function MangaIDApp() {
               >
                 <div className="aspect-[3/4] bg-[#1C1C1E] overflow-hidden relative">
                   <img
-                    src={imgUrl}
+                    src={resolveProxyImage(imgUrl)}
                     alt={`Halaman ${idx + 1}`}
                     className="w-full h-full object-cover"
                     loading="lazy"
+                    referrerPolicy="no-referrer"
                   />
                   <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-[3px] bg-[#0D0D0E]/85 font-mono text-[10px] text-[#ECE9E2]">
                     #{idx + 1}
@@ -2601,8 +2612,9 @@ export default function MangaIDApp() {
               <div className="flex gap-3 sm:gap-4 min-w-0 flex-1">
                 {explorerSelectedManga.cover_url && (
                   <img
-                    src={explorerSelectedManga.cover_url}
+                    src={resolveProxyImage(explorerSelectedManga.cover_url)}
                     alt={explorerSelectedManga.title}
+                    referrerPolicy="no-referrer"
                     className="w-14 sm:w-16 h-20 sm:h-24 object-cover rounded-[4px] border border-[#2A2A2C] flex-shrink-0"
                   />
                 )}

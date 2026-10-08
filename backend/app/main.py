@@ -10,6 +10,7 @@ from .api.ingest import router as ingest_router
 from .api.jobs import router as jobs_router
 from .api.chapters import router as chapters_router
 from .api.explorer import router as explorer_router
+from .api.proxy import router as proxy_router
 
 init_db()
 
@@ -43,6 +44,7 @@ app.include_router(ingest_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
 app.include_router(chapters_router, prefix="/api")
 app.include_router(explorer_router, prefix="/api")
+app.include_router(proxy_router, prefix="/api")
 
 @app.get("/")
 def root():
