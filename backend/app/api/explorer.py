@@ -109,10 +109,9 @@ async def search_manga(
 @router.get("/manga/{manga_id}/chapters", response_model=List[ExplorerChapterItem])
 async def get_manga_chapters(
     manga_id: str,
-    lang: str = Query("en", description="Translated language filter (en, ja, all)"),
+    lang: str = Query("all", description="Translated language filter (en, id, ja, all)"),
     limit: int = Query(100, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    include_external: bool = Query(False, description="Include chapters hosted on external viewer")
 ):
     try:
         params = [
@@ -122,16 +121,11 @@ async def get_manga_chapters(
             ("includes[]", "scanlation_group"),
             ("contentRating[]", "safe"),
             ("contentRating[]", "suggestive"),
+            ("contentRating[]", "erotica"),
         ]
-        if not include_external:
-            params.append(("includeExternalUrl", "0"))
 
         if lang and lang.lower() != "all":
             params.append(("translatedLanguage[]", lang.lower()))
-        else:
-            params.append(("translatedLanguage[]", "en"))
-            params.append(("translatedLanguage[]", "ja"))
-            params.append(("translatedLanguage[]", "id"))
 
         async with httpx.AsyncClient(timeout=20.0, headers=MANGADEX_HEADERS) as client:
             resp = await client.get(f"{MANGADEX_API_BASE}/manga/{manga_id}/feed", params=params)

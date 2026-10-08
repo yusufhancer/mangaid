@@ -152,7 +152,7 @@ export default function MangaIDApp() {
   const [explorerSelectedManga, setExplorerSelectedManga] = useState<ExplorerManga | null>(null);
   const [explorerChapters, setExplorerChapters] = useState<ExplorerChapter[]>([]);
   const [explorerChaptersLoading, setExplorerChaptersLoading] = useState(false);
-  const [explorerLang, setExplorerLang] = useState("en");
+  const [explorerLang, setExplorerLang] = useState("all");
   const [explorerChapterSearch, setExplorerChapterSearch] = useState("");
   const [explorerSortOrder, setExplorerSortOrder] = useState<"asc" | "desc">("asc");
   const [ingestingChapterId, setIngestingChapterId] = useState<string | null>(null);
@@ -2517,13 +2517,14 @@ export default function MangaIDApp() {
             {/* Filter & Toolbar */}
             <div className="p-3 sm:p-4 border-b border-[#2A2A2C] bg-[#151516] flex flex-col sm:flex-row gap-2.5 sm:items-center justify-between">
               {/* Language Selector */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-[#8E8B84]">Bahasa:</span>
-                <div className="flex items-center bg-[#111112] p-0.5 rounded-[6px] border border-[#2A2A2C]">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                <span className="text-xs font-mono text-[#8E8B84] flex-shrink-0">Bahasa:</span>
+                <div className="flex items-center bg-[#111112] p-0.5 rounded-[6px] border border-[#2A2A2C] flex-shrink-0">
                   {[
-                    { code: "en", label: "Inggris (EN)" },
-                    { code: "ja", label: "Jepang (RAW)" },
                     { code: "all", label: "Semua" },
+                    { code: "en", label: "Inggris (EN)" },
+                    { code: "id", label: "Indonesia (ID)" },
+                    { code: "ja", label: "Jepang (RAW)" },
                   ].map((l) => (
                     <button
                       key={l.code}
@@ -2596,6 +2597,11 @@ export default function MangaIDApp() {
                         <span className="px-1.5 py-0.5 rounded bg-[#1C1C1E] text-[10px] font-mono text-[#8E8B84] uppercase">
                           {ch.language}
                         </span>
+                        {ch.is_external && (
+                          <span className="px-1.5 py-0.5 rounded bg-[#1C1C1E] border border-[#2A2A2C] text-[9px] font-mono text-[#E8452C]">
+                            Eksternal
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-[11px] font-mono text-[#8E8B84] mt-0.5">
                         {ch.pages_count > 0 && <span>{ch.pages_count} Halaman</span>}
@@ -2611,7 +2617,7 @@ export default function MangaIDApp() {
                           rel="noopener noreferrer"
                           className="px-3 py-1.5 rounded-[5px] border border-[#2A2A2C] bg-[#111112] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] text-xs font-mono transition-colors"
                         >
-                          Buka di MangaPlus ↗
+                          Buka di Penerbit Resmi ↗
                         </a>
                       ) : (
                         <button
