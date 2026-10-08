@@ -109,18 +109,53 @@ interface DeleteTarget {
   redirectHome?: boolean;
 }
 
+interface ExplorerManga {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string | null;
+  year: number | null;
+  cover_url: string | null;
+  tags: string[];
+}
+
+interface ExplorerChapter {
+  id: string;
+  chapter_number: string;
+  title: string | null;
+  pages_count: number;
+  language: string;
+  group_name: string | null;
+  publish_at: string | null;
+  is_external: boolean;
+  external_url: string | null;
+}
+
 export default function MangaIDApp() {
   // Navigation states: 'home' | 'review' | 'progress' | 'reader'
   const [view, setView] = useState<"home" | "review" | "progress" | "reader">("home");
   const [savedChapters, setSavedChapters] = useState<SavedChapter[]>([]);
 
   // Home states
-  const [inputMode, setInputMode] = useState<"url" | "upload">("url");
+  const [inputMode, setInputMode] = useState<"url" | "upload" | "explorer">("url");
   const [urlInput, setUrlInput] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Explorer states
+  const [explorerQuery, setExplorerQuery] = useState("");
+  const [explorerLoading, setExplorerLoading] = useState(false);
+  const [explorerResults, setExplorerResults] = useState<ExplorerManga[]>([]);
+  const [explorerHasSearched, setExplorerHasSearched] = useState(false);
+  const [explorerSelectedManga, setExplorerSelectedManga] = useState<ExplorerManga | null>(null);
+  const [explorerChapters, setExplorerChapters] = useState<ExplorerChapter[]>([]);
+  const [explorerChaptersLoading, setExplorerChaptersLoading] = useState(false);
+  const [explorerLang, setExplorerLang] = useState("en");
+  const [explorerChapterSearch, setExplorerChapterSearch] = useState("");
+  const [explorerSortOrder, setExplorerSortOrder] = useState<"asc" | "desc">("asc");
+  const [ingestingChapterId, setIngestingChapterId] = useState<string | null>(null);
 
   // Settings
   const [showSettings, setShowSettings] = useState(false);
@@ -239,6 +274,87 @@ export default function MangaIDApp() {
       setErrorMsg(err.message || "Gagal mengunggah file.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Explorer handlers
+  const handleSearchManga = async (customQuery?: string) => {
+    const q = (customQuery !== undefined ? customQuery : explorerQuery).trim();
+    if (!q) return;
+
+    setExplorerLoading(true);
+    setErrorMsg(null);
+    setExplorerHasSearched(true);
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/explorer/search?q=${encodeURIComponent(q)}`);
+      if (!resp.ok) {
+        throw new Error("Gagal mencari manga di katalog.");
+      }
+      const data: ExplorerManga[] = await resp.json();
+      setExplorerResults(data);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Terjadi kesalahan saat mencari manga.");
+    } finally {
+      setExplorerLoading(false);
+    }
+  };
+
+  const loadMangaChapters = async (mangaId: string, lang: string) => {
+    setExplorerChaptersLoading(true);
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/explorer/manga/${mangaId}/chapters?lang=${lang}&limit=100`);
+      if (!resp.ok) {
+        throw new Error("Gagal mengambil daftar bab.");
+      }
+      const data: ExplorerChapter[] = await resp.json();
+      setExplorerChapters(data);
+    } catch (err: any) {
+      console.error("Load manga chapters error:", err);
+    } finally {
+      setExplorerChaptersLoading(false);
+    }
+  };
+
+  const handleSelectManga = (manga: ExplorerManga) => {
+    setExplorerSelectedManga(manga);
+    setExplorerChapterSearch("");
+    setExplorerSortOrder("asc");
+    loadMangaChapters(manga.id, explorerLang);
+  };
+
+  const handleIngestExplorerChapter = async (chapter: ExplorerChapter) => {
+    setIngestingChapterId(chapter.id);
+    setErrorMsg(null);
+
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: `https://mangadex.org/chapter/${chapter.id}` }),
+      });
+
+      if (!resp.ok) {
+        let errorDetail = "Gagal memproses bab manga.";
+        try {
+          const err = await resp.json();
+          errorDetail = err.detail || errorDetail;
+        } catch {
+          const text = await resp.text();
+          if (text) errorDetail = `Server error: ${text.slice(0, 100)}`;
+        }
+        throw new Error(errorDetail);
+      }
+
+      const data: IngestData = await resp.json();
+      setIngestResult(data);
+      setReviewPages(data.pages.map((p) => p.image_url));
+      setExplorerSelectedManga(null);
+      setView("review");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Gagal mengambil data bab manga.");
+    } finally {
+      setIngestingChapterId(null);
     }
   };
 
@@ -530,6 +646,26 @@ export default function MangaIDApp() {
 
     return list;
   }, [selectedSeries, seriesList, drawerSearchQuery, drawerSortOrder]);
+
+  // Explorer filtered & sorted chapters
+  const filteredExplorerChapters = useMemo(() => {
+    let list = [...explorerChapters];
+    const q = explorerChapterSearch.toLowerCase().trim();
+    if (q) {
+      list = list.filter(
+        (c) =>
+          c.chapter_number.toLowerCase().includes(q) ||
+          (c.title || "").toLowerCase().includes(q) ||
+          (c.group_name || "").toLowerCase().includes(q)
+      );
+    }
+    list.sort((a, b) => {
+      const numA = parseFloat(a.chapter_number.replace(/[^\d.]/g, "")) || 0;
+      const numB = parseFloat(b.chapter_number.replace(/[^\d.]/g, "")) || 0;
+      return explorerSortOrder === "asc" ? numA - numB : numB - numA;
+    });
+    return list;
+  }, [explorerChapters, explorerChapterSearch, explorerSortOrder]);
 
   // Rename handlers
   const handleOpenRename = (target: RenameTarget) => {
@@ -908,10 +1044,10 @@ export default function MangaIDApp() {
                 {/* Top Toolbar inside Card */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#2A2A2C] mb-6">
                   {/* Underlined Tab Switcher */}
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0">
                     <button
                       onClick={() => setInputMode("url")}
-                      className={`pb-2 text-xs font-semibold tracking-wide transition-colors relative cursor-pointer ${
+                      className={`pb-2 text-xs font-semibold tracking-wide transition-colors relative cursor-pointer flex-shrink-0 ${
                         inputMode === "url"
                           ? "text-[#ECE9E2] border-b-2 border-[#E8452C] -mb-[18px]"
                           : "text-[#8E8B84] hover:text-[#ECE9E2]"
@@ -921,13 +1057,24 @@ export default function MangaIDApp() {
                     </button>
                     <button
                       onClick={() => setInputMode("upload")}
-                      className={`pb-2 text-xs font-semibold tracking-wide transition-colors relative cursor-pointer ${
+                      className={`pb-2 text-xs font-semibold tracking-wide transition-colors relative cursor-pointer flex-shrink-0 ${
                         inputMode === "upload"
                           ? "text-[#ECE9E2] border-b-2 border-[#E8452C] -mb-[18px]"
                           : "text-[#8E8B84] hover:text-[#ECE9E2]"
                       }`}
                     >
-                      Upload Manual (ZIP/CBZ/PDF)
+                      Upload Manual
+                    </button>
+                    <button
+                      onClick={() => setInputMode("explorer")}
+                      className={`pb-2 text-xs font-semibold tracking-wide transition-colors relative cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
+                        inputMode === "explorer"
+                          ? "text-[#ECE9E2] border-b-2 border-[#E8452C] -mb-[18px]"
+                          : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                      }`}
+                    >
+                      <Search className="w-3.5 h-3.5 text-[#E8452C]" />
+                      <span>Cari Manga (Explorer)</span>
                     </button>
                   </div>
 
@@ -946,8 +1093,22 @@ export default function MangaIDApp() {
                 {/* Headline */}
                 <div className="mb-5">
                   <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[#ECE9E2] leading-tight tracking-tight">
-                    Tempel link chapter.<br />
-                    Baca dalam bahasa Indonesia.
+                    {inputMode === "explorer" ? (
+                      <>
+                        Cari judul manga.<br />
+                        Pilih bab & terjemahkan otomatis.
+                      </>
+                    ) : inputMode === "upload" ? (
+                      <>
+                        Unggah berkas komik.<br />
+                        Baca dalam bahasa Indonesia.
+                      </>
+                    ) : (
+                      <>
+                        Tempel link chapter.<br />
+                        Baca dalam bahasa Indonesia.
+                      </>
+                    )}
                   </h1>
                 </div>
 
@@ -1016,7 +1177,7 @@ export default function MangaIDApp() {
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : inputMode === "upload" ? (
                   /* Form Upload Manual */
                   <form onSubmit={handleManualUpload} className="space-y-4">
                     <div className="border border-dashed border-[#2A2A2C] hover:border-[#8E8B84] rounded-[6px] p-8 bg-[#0D0D0E] text-center transition-colors">
@@ -1064,6 +1225,152 @@ export default function MangaIDApp() {
                       </button>
                     </div>
                   </form>
+                ) : (
+                  /* Form Explorer (Cari Manga Langsung) */
+                  <div className="space-y-4">
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSearchManga();
+                      }}
+                      className="flex flex-col sm:flex-row gap-2"
+                    >
+                      <div className="relative flex-1">
+                        <Search
+                          className="w-4 h-4 text-[#8E8B84] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                          strokeWidth={1.5}
+                        />
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ketik judul manga (contoh: One Piece, Jujutsu Kaisen, Chainsaw Man)..."
+                          value={explorerQuery}
+                          onChange={(e) => setExplorerQuery(e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 min-h-[44px] rounded-[6px] bg-[#0D0D0E] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60 text-sm transition-colors"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={explorerLoading || !explorerQuery.trim()}
+                        className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
+                          explorerQuery.trim() && !explorerLoading
+                            ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer"
+                            : "bg-[#1C1C1E] border border-[#2A2A2C] text-[#8E8B84] cursor-not-allowed"
+                        }`}
+                      >
+                        {explorerLoading ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
+                            <span>Mencari...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Cari Manga</span>
+                            <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.5} />
+                          </>
+                        )}
+                      </button>
+                    </form>
+
+                    {/* Quick suggestion tags */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                      <span className="text-[#8E8B84] font-mono mr-1">Rekomendasi:</span>
+                      {["One Piece", "Jujutsu Kaisen", "Solo Leveling", "Chainsaw Man", "Dandadan", "Oshi no Ko"].map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            setExplorerQuery(tag);
+                            handleSearchManga(tag);
+                          }}
+                          className="px-2.5 py-1 rounded-full bg-[#1C1C1E] border border-[#2A2A2C] hover:border-[#E8452C]/60 hover:text-[#ECE9E2] text-[#8E8B84] transition-colors text-xs cursor-pointer"
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Explorer Results Display */}
+                    {explorerLoading ? (
+                      <div className="py-12 flex flex-col items-center justify-center gap-3 text-[#8E8B84]">
+                        <RefreshCw className="w-6 h-6 animate-spin text-[#E8452C]" />
+                        <span className="text-xs font-mono">Menghubungi katalog resmi MangaDex...</span>
+                      </div>
+                    ) : explorerResults.length > 0 ? (
+                      <div className="pt-2">
+                        <div className="text-xs text-[#8E8B84] font-mono mb-3">
+                          Ditemukan {explorerResults.length} hasil untuk "{explorerQuery}":
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+                          {explorerResults.map((manga) => (
+                            <div
+                              key={manga.id}
+                              onClick={() => handleSelectManga(manga)}
+                              className="group flex flex-col rounded-[6px] border border-[#2A2A2C] hover:border-[#E8452C] bg-[#111112] overflow-hidden transition-all duration-200 hover:-translate-y-1 shadow-sm hover:shadow-md cursor-pointer"
+                            >
+                              {/* Cover Poster */}
+                              <div className="aspect-[3/4] relative bg-[#1C1C1E] overflow-hidden">
+                                {manga.cover_url ? (
+                                  <img
+                                    src={manga.cover_url}
+                                    alt={manga.title}
+                                    loading="lazy"
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    onError={(e) => {
+                                      (e.target as HTMLElement).style.display = "none";
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[#8E8B84] text-xs font-mono p-2 text-center">
+                                    No Cover
+                                  </div>
+                                )}
+                                {manga.status && (
+                                  <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-[3px] bg-[#0D0D0E]/80 backdrop-blur border border-[#2A2A2C] font-mono text-[9px] text-[#ECE9E2] uppercase tracking-wider">
+                                    {manga.status}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Info */}
+                              <div className="p-2.5 flex-1 flex flex-col justify-between">
+                                <div>
+                                  <h4
+                                    className="font-display text-xs font-bold text-[#ECE9E2] line-clamp-2 group-hover:text-[#E8452C] transition-colors leading-snug"
+                                    title={manga.title}
+                                  >
+                                    {manga.title}
+                                  </h4>
+                                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#8E8B84] mt-1">
+                                    {manga.year && <span>{manga.year}</span>}
+                                    {manga.tags[0] && (
+                                      <span>• {manga.tags[0]}</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  className="mt-2.5 w-full py-1.5 px-2 rounded-[4px] bg-[#1C1C1E] group-hover:bg-[#E8452C] text-[#ECE9E2] group-hover:text-white text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
+                                >
+                                  <BookOpen className="w-3 h-3" />
+                                  <span>Pilih Bab</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : explorerHasSearched ? (
+                      <div className="p-8 text-center rounded-[6px] border border-[#2A2A2C] bg-[#0D0D0E] text-[#8E8B84] text-xs">
+                        Tidak ada komik yang ditemukan dengan kata kunci "{explorerQuery}". Silakan coba kata kunci lain.
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center rounded-[6px] border border-dashed border-[#2A2A2C] bg-[#0D0D0E] text-[#8E8B84] text-xs">
+                        Ketik nama manga di atas atau klik salah satu rekomendasi untuk melihat katalog langsung dari MangaDex.
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -1939,6 +2246,7 @@ export default function MangaIDApp() {
               <div className="bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] p-3.5 space-y-2">
                 <div className="font-semibold text-[#ECE9E2]">Cara Menggunakan:</div>
                 <ul className="list-disc pl-4 space-y-1 text-[#8E8B84]">
+                  <li><strong className="text-[#ECE9E2]">Cari Manga (Explorer):</strong> Cari judul komik di tab <em>Cari Manga</em>, pilih bab, dan langsung terjemahkan tanpa perlu copas URL.</li>
                   <li><strong className="text-[#ECE9E2]">Tempel Link:</strong> Masukkan URL chapter manga dari MangaDex, Rawkuma, atau situs manga publik lainnya, lalu klik <span className="text-[#E8452C] font-semibold">Analisis</span>.</li>
                   <li><strong className="text-[#ECE9E2]">Upload Manual:</strong> Jika web target terproteksi Cloudflare/captcha, unduh halamannya lalu upload sebagai ZIP, CBZ, PDF, atau gambar.</li>
                   <li><strong className="text-[#ECE9E2]">Gaya Bahasa:</strong> Pilih antara <span className="text-[#ECE9E2]">Gaul / Santai</span> (lo-gue, komik) atau <span className="text-[#ECE9E2]">Baku / Netral</span>.</li>
@@ -2141,6 +2449,205 @@ export default function MangaIDApp() {
                   setDrawerSearchQuery("");
                 }}
                 className="px-4 py-1.5 rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Explorer Manga Chapters Drawer / Modal */}
+      {explorerSelectedManga && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-t-xl sm:rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom duration-200">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-[#2A2A2C] flex items-start justify-between gap-4 bg-[#111112]">
+              <div className="flex gap-3 sm:gap-4 min-w-0 flex-1">
+                {explorerSelectedManga.cover_url && (
+                  <img
+                    src={explorerSelectedManga.cover_url}
+                    alt={explorerSelectedManga.title}
+                    className="w-14 sm:w-16 h-20 sm:h-24 object-cover rounded-[4px] border border-[#2A2A2C] flex-shrink-0"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-1.5 py-0.5 rounded-[3px] bg-[#E8452C]/10 border border-[#E8452C]/30 text-[#E8452C] font-mono text-[10px] uppercase font-bold">
+                      MangaDex
+                    </span>
+                    {explorerSelectedManga.status && (
+                      <span className="font-mono text-[10px] text-[#8E8B84] uppercase">
+                        {explorerSelectedManga.status}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-display text-base sm:text-lg font-bold text-[#ECE9E2] leading-snug line-clamp-2">
+                    {explorerSelectedManga.title}
+                  </h3>
+                  {explorerSelectedManga.description && (
+                    <p className="text-xs text-[#8E8B84] line-clamp-2 mt-1">
+                      {explorerSelectedManga.description}
+                    </p>
+                  )}
+                  {explorerSelectedManga.tags.length > 0 && (
+                    <div className="flex gap-1 flex-wrap mt-2">
+                      {explorerSelectedManga.tags.slice(0, 4).map((tag) => (
+                        <span
+                          key={tag}
+                          className="px-1.5 py-0.5 rounded-[3px] bg-[#1C1C1E] text-[10px] text-[#8E8B84]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setExplorerSelectedManga(null)}
+                className="text-[#8E8B84] hover:text-[#ECE9E2] p-1.5 rounded-[6px] hover:bg-[#1C1C1E] transition-colors cursor-pointer flex-shrink-0"
+                title="Tutup"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter & Toolbar */}
+            <div className="p-3 sm:p-4 border-b border-[#2A2A2C] bg-[#151516] flex flex-col sm:flex-row gap-2.5 sm:items-center justify-between">
+              {/* Language Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-[#8E8B84]">Bahasa:</span>
+                <div className="flex items-center bg-[#111112] p-0.5 rounded-[6px] border border-[#2A2A2C]">
+                  {[
+                    { code: "en", label: "Inggris (EN)" },
+                    { code: "ja", label: "Jepang (RAW)" },
+                    { code: "all", label: "Semua" },
+                  ].map((l) => (
+                    <button
+                      key={l.code}
+                      onClick={() => {
+                        setExplorerLang(l.code);
+                        if (explorerSelectedManga) {
+                          loadMangaChapters(explorerSelectedManga.id, l.code);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-[4px] text-xs font-medium transition-colors cursor-pointer ${
+                        explorerLang === l.code
+                          ? "bg-[#E8452C] text-white font-semibold"
+                          : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                      }`}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Search & Sort */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 sm:w-44">
+                  <Search className="w-3.5 h-3.5 text-[#8E8B84] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Cari bab..."
+                    value={explorerChapterSearch}
+                    onChange={(e) => setExplorerChapterSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#111112] border border-[#2A2A2C] text-[#ECE9E2] placeholder-[#8E8B84]/60 focus:outline-none focus:border-[#E8452C]"
+                  />
+                </div>
+                <button
+                  onClick={() =>
+                    setExplorerSortOrder(explorerSortOrder === "asc" ? "desc" : "asc")
+                  }
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#111112] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                  title="Urutkan Bab"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  <span>{explorerSortOrder === "asc" ? "1 ➔ N" : "N ➔ 1"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Chapters List */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 divide-y divide-[#2A2A2C]/50 space-y-1">
+              {explorerChaptersLoading ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-3 text-[#8E8B84]">
+                  <RefreshCw className="w-6 h-6 animate-spin text-[#E8452C]" />
+                  <span className="text-xs font-mono">Memuat daftar bab...</span>
+                </div>
+              ) : filteredExplorerChapters.length > 0 ? (
+                filteredExplorerChapters.map((ch) => (
+                  <div
+                    key={ch.id}
+                    className="pt-2 pb-2 flex items-center justify-between gap-3 hover:bg-[#1C1C1E]/50 px-2 rounded-[6px] transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-display font-bold text-sm text-[#ECE9E2]">
+                          Bab {ch.chapter_number}
+                        </span>
+                        {ch.title && (
+                          <span className="text-xs text-[#8E8B84] truncate">
+                            — {ch.title}
+                          </span>
+                        )}
+                        <span className="px-1.5 py-0.5 rounded bg-[#1C1C1E] text-[10px] font-mono text-[#8E8B84] uppercase">
+                          {ch.language}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] font-mono text-[#8E8B84] mt-0.5">
+                        {ch.pages_count > 0 && <span>{ch.pages_count} Halaman</span>}
+                        {ch.group_name && <span>• {ch.group_name}</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {ch.is_external ? (
+                        <a
+                          href={ch.external_url || "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 rounded-[5px] border border-[#2A2A2C] bg-[#111112] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] text-xs font-mono transition-colors"
+                        >
+                          Buka di MangaPlus ↗
+                        </a>
+                      ) : (
+                        <button
+                          disabled={ingestingChapterId === ch.id}
+                          onClick={() => handleIngestExplorerChapter(ch)}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {ingestingChapterId === ch.id ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Mengambil...</span>
+                            </>
+                          ) : (
+                            <>
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>Terjemahkan Bab Ini ➔</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-xs text-[#8E8B84]">
+                  Tidak ada bab ditemukan untuk filter ini. Coba pilih bahasa "Semua".
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 sm:px-5 border-t border-[#2A2A2C] bg-[#111112] flex items-center justify-between text-xs font-mono text-[#8E8B84]">
+              <span>{filteredExplorerChapters.length} bab tersedia</span>
+              <button
+                onClick={() => setExplorerSelectedManga(null)}
+                className="hover:text-[#ECE9E2] transition-colors cursor-pointer"
               >
                 Tutup
               </button>
