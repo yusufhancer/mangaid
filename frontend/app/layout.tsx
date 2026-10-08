@@ -38,13 +38,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" className="dark">
+    <html lang="id" className="dark" suppressHydrationWarning>
       <head>
         <meta name="referrer" content="no-referrer" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-touch-fullscreen" content="yes" />
       </head>
-      <body className="min-h-full flex flex-col bg-[var(--bg)] text-[var(--text)] antialiased font-sans selection:bg-[var(--accent)] selection:text-white">
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-[var(--bg)] text-[var(--text)] antialiased font-sans selection:bg-[var(--accent)] selection:text-white"
+      >
         <ServiceWorkerRegister />
         {children}
       </body>
