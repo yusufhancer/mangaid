@@ -25,6 +25,11 @@ import {
   Layers,
   ArrowUpDown,
   Check,
+  Maximize,
+  Minimize,
+  Columns,
+  Rows,
+  Home,
 } from "lucide-react";
 
 const BACKEND_URL = "";
@@ -154,6 +159,9 @@ export default function MangaIDApp() {
   // Reader states
   const [chapterData, setChapterData] = useState<ChapterData | null>(null);
   const [showTranslated, setShowTranslated] = useState(true);
+  const [readerMode, setReaderMode] = useState<"vertical" | "single">("vertical");
+  const [singlePageIdx, setSinglePageIdx] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Quick test URL
   const SAMPLE_URL = "https://mangadex.org/chapter/e9cfaece-daa1-4830-b239-2d09c407b56b/6";
@@ -330,14 +338,91 @@ export default function MangaIDApp() {
       if (!resp.ok) return;
       const data: ChapterData = await resp.json();
       setChapterData(data);
+      setSinglePageIdx(0);
       setView("reader");
       if (typeof window !== "undefined") {
         window.history.pushState({}, "", `?chapter=${cId}`);
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
     } catch (err) {
       console.error("Fetch chapter error:", err);
     }
   };
+
+  // Reader preferences & controls
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedMode = localStorage.getItem("mangaid_reader_mode");
+      if (savedMode === "single" || savedMode === "vertical") {
+        setReaderMode(savedMode);
+      }
+    }
+  }, []);
+
+  const handleSetReaderMode = (mode: "vertical" | "single") => {
+    setReaderMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mangaid_reader_mode", mode);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (typeof document === "undefined") return;
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch((err) => {
+          console.error("Error attempting to exit fullscreen:", err);
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  // Keyboard navigation for reader (arrows & fullscreen)
+  useEffect(() => {
+    if (view !== "reader" || !chapterData) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      if (e.key === "f" || e.key === "F") {
+        toggleFullscreen();
+      } else if (readerMode === "single") {
+        const total = chapterData.pages.length;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " " || e.key === "PageDown") {
+          e.preventDefault();
+          setSinglePageIdx((curr) => {
+            if (curr < total - 1) return curr + 1;
+            return curr;
+          });
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp") {
+          e.preventDefault();
+          setSinglePageIdx((curr) => (curr > 0 ? curr - 1 : 0));
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [view, chapterData, readerMode]);
 
   // Series Grouping
   const seriesList: MangaSeries[] = useMemo(() => {
@@ -380,6 +465,34 @@ export default function MangaIDApp() {
 
     return list;
   }, [savedChapters]);
+
+  // Find current series & adjacent chapters for reader
+  const readerNav = useMemo(() => {
+    if (!chapterData) {
+      return { currentSeries: null, prevChapter: null, nextChapter: null, currentIndex: -1 };
+    }
+
+    const series =
+      seriesList.find((s) => s.chapters.some((c) => c.id === chapterData.id)) ||
+      (chapterData.title
+        ? seriesList.find((s) => s.title.toLowerCase() === chapterData.title!.toLowerCase())
+        : null);
+
+    if (!series || !series.chapters || series.chapters.length === 0) {
+      return { currentSeries: series || null, prevChapter: null, nextChapter: null, currentIndex: -1 };
+    }
+
+    const idx = series.chapters.findIndex((c) => c.id === chapterData.id);
+    const prevChapter = idx > 0 ? series.chapters[idx - 1] : null;
+    const nextChapter = idx >= 0 && idx < series.chapters.length - 1 ? series.chapters[idx + 1] : null;
+
+    return {
+      currentSeries: series,
+      prevChapter,
+      nextChapter,
+      currentIndex: idx,
+    };
+  }, [chapterData, seriesList]);
 
   const filteredSeries = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -1242,13 +1355,14 @@ export default function MangaIDApp() {
         </main>
       )}
 
-      {/* VIEW 4: WEBTOON CONTINUOUS SCROLL READER */}
+      {/* VIEW 4: MANGA READER (WEBTOON CONTINUOUS SCROLL OR SINGLE PAGE SLIDE) */}
       {view === "reader" && chapterData && (
         <div className="flex-1 flex flex-col bg-[#0D0D0E]">
           {/* Reader Sticky Header */}
-          <header className="sticky top-0 z-50 bg-[#0D0D0E]/95 border-b border-[#2A2A2C] py-2.5">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <header className="sticky top-0 z-50 bg-[#0D0D0E]/95 backdrop-blur-md border-b border-[#2A2A2C] py-2 sm:py-2.5">
+            <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3">
+              {/* Left: Back & Chapter Navigation */}
+              <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
                 <button
                   onClick={() => {
                     if (typeof window !== "undefined") {
@@ -1257,16 +1371,47 @@ export default function MangaIDApp() {
                     loadSavedChapters();
                     setView("home");
                   }}
-                  className="min-h-[36px] text-xs text-[#8E8B84] hover:text-[#ECE9E2] flex items-center gap-1 font-mono transition-colors cursor-pointer flex-shrink-0"
+                  className="min-h-[32px] sm:min-h-[36px] text-xs text-[#8E8B84] hover:text-[#ECE9E2] flex items-center gap-1 font-mono transition-colors cursor-pointer flex-shrink-0"
+                  title="Kembali ke Beranda"
                 >
                   <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
-                  <span>Kembali</span>
+                  <span className="hidden sm:inline">Kembali</span>
                 </button>
+
                 <div className="h-3.5 w-px bg-[#2A2A2C] flex-shrink-0" />
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <h3 className="font-display font-bold text-[#ECE9E2] text-xs truncate max-w-[140px] sm:max-w-xs md:max-w-md">
+
+                {/* Chapter Quick Arrows & Title */}
+                <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+                  <button
+                    disabled={!readerNav.prevChapter}
+                    onClick={() => readerNav.prevChapter && fetchChapter(readerNav.prevChapter.id)}
+                    className="p-1 sm:p-1.5 rounded-[4px] border border-[#2A2A2C] bg-[#151516] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-25 disabled:cursor-not-allowed transition-colors cursor-pointer flex-shrink-0"
+                    title={
+                      readerNav.prevChapter
+                        ? `Bab Sebelumnya (Bab ${readerNav.prevChapter.chapter_number || "Sebelumnya"})`
+                        : "Tidak ada bab sebelumnya"
+                    }
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  <h3 className="font-display font-bold text-[#ECE9E2] text-xs truncate max-w-[110px] sm:max-w-xs md:max-w-md">
                     {chapterData.title || "Manga"} — Bab {chapterData.chapter_number || "1"}
                   </h3>
+
+                  <button
+                    disabled={!readerNav.nextChapter}
+                    onClick={() => readerNav.nextChapter && fetchChapter(readerNav.nextChapter.id)}
+                    className="p-1 sm:p-1.5 rounded-[4px] border border-[#2A2A2C] bg-[#151516] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-25 disabled:cursor-not-allowed transition-colors cursor-pointer flex-shrink-0"
+                    title={
+                      readerNav.nextChapter
+                        ? `Bab Berikutnya (Bab ${readerNav.nextChapter.chapter_number || "Berikutnya"})`
+                        : "Tidak ada bab berikutnya"
+                    }
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+
                   <button
                     onClick={() =>
                       handleOpenRename({
@@ -1284,28 +1429,74 @@ export default function MangaIDApp() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Segmented Flat Toggle */}
+              {/* Right: Mode Switcher, Fullscreen, Language, PDF, Delete */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                {/* Mode Baca: Webtoon vs Slide */}
+                <div
+                  className="flex items-center bg-[#151516] p-0.5 rounded-[6px] border border-[#2A2A2C]"
+                  title="Pilih Mode Baca"
+                >
+                  <button
+                    onClick={() => handleSetReaderMode("vertical")}
+                    className={`flex items-center gap-1 min-h-[30px] px-2 py-1 rounded-[4px] text-xs font-medium transition-colors cursor-pointer ${
+                      readerMode === "vertical"
+                        ? "bg-[#2A2A2C] text-[#ECE9E2] font-semibold"
+                        : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                    }`}
+                    title="Mode Webtoon (Gulir Vertikal)"
+                  >
+                    <Rows className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline">Webtoon</span>
+                  </button>
+                  <button
+                    onClick={() => handleSetReaderMode("single")}
+                    className={`flex items-center gap-1 min-h-[30px] px-2 py-1 rounded-[4px] text-xs font-medium transition-colors cursor-pointer ${
+                      readerMode === "single"
+                        ? "bg-[#2A2A2C] text-[#ECE9E2] font-semibold"
+                        : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                    }`}
+                    title="Mode Slide (Halaman Tunggal)"
+                  >
+                    <Columns className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline">Slide</span>
+                  </button>
+                </div>
+
+                {/* Fullscreen Toggle */}
+                <button
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-1 min-h-[30px] px-2 sm:px-2.5 py-1 rounded-[6px] border border-[#2A2A2C] bg-[#151516] hover:bg-[#1C1C1E] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                  title={isFullscreen ? "Keluar Layar Penuh (F / Esc)" : "Layar Penuh (F)"}
+                >
+                  {isFullscreen ? (
+                    <Minimize className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  ) : (
+                    <Maximize className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  )}
+                  <span className="hidden lg:inline">{isFullscreen ? "Normal" : "Layar Penuh"}</span>
+                </button>
+
+                {/* Segmented Flat Toggle: Terjemahan vs Asli */}
                 <div className="flex items-center bg-[#151516] p-0.5 rounded-[6px] border border-[#2A2A2C]">
                   <button
                     onClick={() => setShowTranslated(true)}
-                    className={`min-h-[32px] px-2.5 py-1 rounded-[4px] text-xs font-medium transition-colors cursor-pointer ${
+                    className={`min-h-[30px] px-2 sm:px-2.5 py-1 rounded-[4px] text-xs font-medium transition-colors cursor-pointer ${
                       showTranslated
                         ? "bg-[#E8452C] text-white font-semibold shadow-sm"
                         : "text-[#8E8B84] hover:text-[#ECE9E2]"
                     }`}
                   >
-                    Terjemahan (ID)
+                    ID
                   </button>
                   <button
                     onClick={() => setShowTranslated(false)}
-                    className={`min-h-[32px] px-2.5 py-1 rounded-[4px] text-xs font-medium transition-colors cursor-pointer ${
+                    className={`min-h-[30px] px-2 sm:px-2.5 py-1 rounded-[4px] text-xs font-medium transition-colors cursor-pointer ${
                       !showTranslated
                         ? "bg-[#E8452C] text-white font-semibold shadow-sm"
                         : "text-[#8E8B84] hover:text-[#ECE9E2]"
                     }`}
                   >
-                    Teks Asli
+                    Asli
                   </button>
                 </div>
 
@@ -1313,11 +1504,11 @@ export default function MangaIDApp() {
                 <a
                   href={`${BACKEND_URL}/api/chapters/${chapterData.id}/pdf`}
                   download
-                  className="flex items-center gap-1 min-h-[32px] px-2.5 py-1 rounded-[6px] border border-[#2A2A2C] bg-[#151516] hover:bg-[#1C1C1E] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors"
+                  className="flex items-center gap-1 min-h-[30px] px-2 sm:px-2.5 py-1 rounded-[6px] border border-[#2A2A2C] bg-[#151516] hover:bg-[#1C1C1E] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors"
                   title="Unduh PDF"
                 >
                   <Download className="w-3.5 h-3.5" strokeWidth={1.5} />
-                  <span>PDF</span>
+                  <span className="hidden sm:inline">PDF</span>
                 </a>
 
                 {/* Delete Chapter Button */}
@@ -1330,39 +1521,347 @@ export default function MangaIDApp() {
                       redirectHome: true,
                     })
                   }
-                  className="flex items-center gap-1 min-h-[32px] px-2.5 py-1 rounded-[6px] border border-[#2A2A2C] bg-[#151516] hover:border-[#D4493E]/60 hover:bg-[#D4493E]/10 text-xs font-mono text-[#8E8B84] hover:text-[#D4493E] transition-colors cursor-pointer"
+                  className="flex items-center gap-1 min-h-[30px] px-2 sm:px-2.5 py-1 rounded-[6px] border border-[#2A2A2C] bg-[#151516] hover:border-[#D4493E]/60 hover:bg-[#D4493E]/10 text-xs font-mono text-[#8E8B84] hover:text-[#D4493E] transition-colors cursor-pointer"
                   title="Hapus Bab Ini"
                 >
                   <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                  <span className="hidden sm:inline">Hapus</span>
+                  <span className="hidden xl:inline">Hapus</span>
                 </button>
               </div>
             </div>
           </header>
 
-          {/* Webtoon Continuous Vertical Scroll Container */}
-          <div className="flex-1 bg-[#0D0D0E] flex flex-col items-center py-4 px-0">
-            <div className="max-w-3xl w-full flex flex-col items-center">
-              {chapterData.pages.map((p) => {
-                const isTrans = showTranslated && Boolean(p.translated_url);
-                const imgSrc = isTrans
-                  ? `${BACKEND_URL}${p.translated_url}?v=2`
-                  : `${BACKEND_URL}${p.original_url}?v=2`;
+          {/* READER BODY: SINGLE PAGE MODE VS WEBTOON MODE */}
+          {readerMode === "single" ? (
+            <div className="flex-1 bg-[#0D0D0E] flex flex-col items-center justify-start select-none relative min-h-[calc(100vh-55px)] pb-24">
+              {chapterData.pages.length > 0 ? (
+                (() => {
+                  const safeSingleIdx = Math.min(
+                    Math.max(0, singlePageIdx),
+                    Math.max(0, chapterData.pages.length - 1)
+                  );
+                  const curPage = chapterData.pages[safeSingleIdx] || chapterData.pages[0];
+                  const isTrans = showTranslated && Boolean(curPage?.translated_url);
+                  const curImgSrc = curPage
+                    ? isTrans
+                      ? `${BACKEND_URL}${curPage.translated_url}?v=2`
+                      : `${BACKEND_URL}${curPage.original_url}?v=2`
+                    : "";
 
-                return (
-                  <div key={p.page_number} className="w-full relative bg-[#0D0D0E] flex justify-center">
-                    <img
-                      key={`${p.page_number}-${isTrans ? "trans" : "orig"}`}
-                      src={imgSrc}
-                      alt={`Halaman ${p.page_number} (${isTrans ? "Terjemahan" : "Asli"})`}
-                      loading="lazy"
-                      className="w-full h-auto block select-none"
-                    />
-                  </div>
-                );
-              })}
+                  return (
+                    <div className="w-full max-w-4xl flex flex-col items-center px-2 sm:px-4 py-4 my-auto">
+                      {/* Manga Page Display with Tap Zones */}
+                      <div className="relative flex items-center justify-center max-w-full">
+                        <img
+                          key={`${curPage.page_number}-${isTrans ? "trans" : "orig"}`}
+                          src={curImgSrc}
+                          alt={`Halaman ${curPage.page_number} (${isTrans ? "Terjemahan" : "Asli"})`}
+                          className="max-h-[82vh] w-auto max-w-full object-contain rounded-[4px] shadow-2xl block"
+                        />
+
+                        {/* Left Tap Zone (Previous Page) */}
+                        <div
+                          onClick={() => {
+                            if (safeSingleIdx > 0) {
+                              setSinglePageIdx(safeSingleIdx - 1);
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }
+                          }}
+                          className={`absolute inset-y-0 left-0 w-1/3 flex items-center justify-start pl-2 sm:pl-4 transition-all ${
+                            safeSingleIdx > 0 ? "cursor-pointer group" : "cursor-default"
+                          }`}
+                          title={safeSingleIdx > 0 ? "Halaman Sebelumnya (←)" : "Halaman Pertama"}
+                        >
+                          {safeSingleIdx > 0 && (
+                            <div className="opacity-0 group-hover:opacity-100 bg-[#0D0D0E]/80 backdrop-blur border border-[#2A2A2C] text-[#ECE9E2] p-2.5 rounded-full transition-opacity shadow-xl">
+                              <ChevronLeft className="w-5 h-5" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right Tap Zone (Next Page) */}
+                        <div
+                          onClick={() => {
+                            if (safeSingleIdx < chapterData.pages.length - 1) {
+                              setSinglePageIdx(safeSingleIdx + 1);
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            } else if (readerNav.nextChapter) {
+                              fetchChapter(readerNav.nextChapter.id);
+                            }
+                          }}
+                          className="absolute inset-y-0 right-0 w-1/3 flex items-center justify-end pr-2 sm:pr-4 cursor-pointer group transition-all"
+                          title={
+                            safeSingleIdx < chapterData.pages.length - 1
+                              ? "Halaman Berikutnya (→)"
+                              : readerNav.nextChapter
+                              ? `Lanjut ke Bab ${readerNav.nextChapter.chapter_number || "Berikutnya"}`
+                              : "Halaman Terakhir"
+                          }
+                        >
+                          <div className="opacity-0 group-hover:opacity-100 bg-[#0D0D0E]/80 backdrop-blur border border-[#2A2A2C] text-[#ECE9E2] p-2.5 rounded-full transition-opacity shadow-xl">
+                            <ChevronRight className="w-5 h-5" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* If user is at the last page, show the End of Chapter Card below */}
+                      {safeSingleIdx === chapterData.pages.length - 1 && (
+                        <div className="w-full mt-6">
+                          {/* End-of-Chapter Navigation Card */}
+                          <div className="w-full max-w-2xl mx-auto my-6 p-6 sm:p-8 rounded-[8px] bg-[#151516] border border-[#2A2A2C] shadow-2xl text-center">
+                            <div className="w-12 h-12 rounded-full bg-[#E8452C]/10 border border-[#E8452C]/30 text-[#E8452C] flex items-center justify-center mx-auto mb-3">
+                              <Check className="w-6 h-6" strokeWidth={2.5} />
+                            </div>
+
+                            <h4 className="font-display font-bold text-lg sm:text-xl text-[#ECE9E2] mb-1">
+                              Selesai Membaca!
+                            </h4>
+                            <p className="text-xs sm:text-sm text-[#8E8B84] mb-6">
+                              Kamu telah menyelesaikan{" "}
+                              <strong className="text-[#ECE9E2]">
+                                {chapterData.title || "Manga"} — Bab {chapterData.chapter_number || "1"}
+                              </strong>
+                            </p>
+
+                            {/* Primary Action: Next Chapter */}
+                            {readerNav.nextChapter ? (
+                              <div className="mb-5">
+                                <button
+                                  onClick={() =>
+                                    readerNav.nextChapter && fetchChapter(readerNav.nextChapter.id)
+                                  }
+                                  className="w-full sm:w-auto min-w-[280px] inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-white font-display font-bold text-sm sm:text-base shadow-lg shadow-[#E8452C]/25 transition-all cursor-pointer group"
+                                >
+                                  <span>
+                                    Lanjut ke Bab {readerNav.nextChapter.chapter_number || "Berikutnya"}
+                                  </span>
+                                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1.5 transition-transform" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="mb-5 inline-flex items-center gap-2 px-4 py-2 rounded-[6px] bg-[#1C1C1E] border border-[#2A2A2C] text-xs font-mono text-[#8E8B84]">
+                                <span className="text-sm">🎉</span>
+                                <span>Ini adalah bab terbaru yang tersimpan di MangaID!</span>
+                              </div>
+                            )}
+
+                            {/* Secondary Actions */}
+                            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-5 border-t border-[#2A2A2C]/80">
+                              {readerNav.prevChapter && (
+                                <button
+                                  onClick={() =>
+                                    readerNav.prevChapter && fetchChapter(readerNav.prevChapter.id)
+                                  }
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:bg-[#2A2A2C] text-xs font-mono text-[#ECE9E2] transition-colors cursor-pointer"
+                                >
+                                  <ChevronLeft className="w-3.5 h-3.5" />
+                                  <span>Bab {readerNav.prevChapter.chapter_number || "Sebelumnya"}</span>
+                                </button>
+                              )}
+
+                              {readerNav.currentSeries && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedSeries(readerNav.currentSeries);
+                                    setView("home");
+                                    if (typeof window !== "undefined") {
+                                      window.history.pushState({}, "", window.location.pathname);
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:bg-[#2A2A2C] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                                >
+                                  <Layers className="w-3.5 h-3.5 text-[#E8452C]" />
+                                  <span>Daftar Bab ({readerNav.currentSeries.totalChapters})</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => {
+                                  if (typeof window !== "undefined") {
+                                    window.history.pushState({}, "", window.location.pathname);
+                                  }
+                                  loadSavedChapters();
+                                  setView("home");
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:bg-[#2A2A2C] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                              >
+                                <Home className="w-3.5 h-3.5" />
+                                <span>Beranda</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="p-12 text-center text-xs text-[#8E8B84] font-mono">
+                  Belum ada halaman pada bab ini.
+                </div>
+              )}
+
+              {/* Floating Single Page Pagination Bar */}
+              {chapterData.pages.length > 0 && (
+                <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-[#151516]/95 backdrop-blur-md border border-[#2A2A2C] rounded-full px-4 py-1.5 shadow-2xl flex items-center gap-3 font-mono text-xs text-[#ECE9E2] select-none">
+                  <button
+                    disabled={singlePageIdx === 0}
+                    onClick={() => {
+                      setSinglePageIdx((curr) => Math.max(0, curr - 1));
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="p-1 rounded-full hover:bg-[#2A2A2C] text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-25 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    title="Halaman Sebelumnya (←)"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  <span className="font-semibold text-xs tracking-wide">
+                    Hal {Math.min(singlePageIdx + 1, chapterData.pages.length)}{" "}
+                    <span className="text-[#8E8B84] font-normal">/ {chapterData.pages.length}</span>
+                  </span>
+
+                  <button
+                    disabled={singlePageIdx >= chapterData.pages.length - 1}
+                    onClick={() => {
+                      setSinglePageIdx((curr) => Math.min(chapterData.pages.length - 1, curr + 1));
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="p-1 rounded-full hover:bg-[#2A2A2C] text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-25 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    title="Halaman Berikutnya (→)"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  {/* Quick Next Chapter CTA on floating pill when at last page */}
+                  {singlePageIdx >= chapterData.pages.length - 1 && readerNav.nextChapter && (
+                    <>
+                      <div className="h-3.5 w-px bg-[#2A2A2C]" />
+                      <button
+                        onClick={() =>
+                          readerNav.nextChapter && fetchChapter(readerNav.nextChapter.id)
+                        }
+                        className="flex items-center gap-1 text-[11px] font-semibold text-[#E8452C] hover:text-[#FF5A40] transition-colors cursor-pointer"
+                      >
+                        <span>Bab {readerNav.nextChapter.chapter_number || "Next"}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            /* Webtoon Continuous Vertical Scroll Container */
+            <div className="flex-1 bg-[#0D0D0E] flex flex-col items-center py-4 px-0">
+              <div className="max-w-3xl w-full flex flex-col items-center">
+                {chapterData.pages.map((p) => {
+                  const isTrans = showTranslated && Boolean(p.translated_url);
+                  const imgSrc = isTrans
+                    ? `${BACKEND_URL}${p.translated_url}?v=2`
+                    : `${BACKEND_URL}${p.original_url}?v=2`;
+
+                  return (
+                    <div key={p.page_number} className="w-full relative bg-[#0D0D0E] flex justify-center">
+                      <img
+                        key={`${p.page_number}-${isTrans ? "trans" : "orig"}`}
+                        src={imgSrc}
+                        alt={`Halaman ${p.page_number} (${isTrans ? "Terjemahan" : "Asli"})`}
+                        loading="lazy"
+                        className="w-full h-auto block select-none"
+                      />
+                    </div>
+                  );
+                })}
+
+                {/* End-of-Chapter Navigation Card in Webtoon Mode */}
+                <div className="w-full max-w-2xl px-4 my-8 sm:my-12">
+                  <div className="p-6 sm:p-8 rounded-[8px] bg-[#151516] border border-[#2A2A2C] shadow-2xl text-center">
+                    <div className="w-12 h-12 rounded-full bg-[#E8452C]/10 border border-[#E8452C]/30 text-[#E8452C] flex items-center justify-center mx-auto mb-3">
+                      <Check className="w-6 h-6" strokeWidth={2.5} />
+                    </div>
+
+                    <h4 className="font-display font-bold text-lg sm:text-xl text-[#ECE9E2] mb-1">
+                      Selesai Membaca!
+                    </h4>
+                    <p className="text-xs sm:text-sm text-[#8E8B84] mb-6">
+                      Kamu telah menyelesaikan{" "}
+                      <strong className="text-[#ECE9E2]">
+                        {chapterData.title || "Manga"} — Bab {chapterData.chapter_number || "1"}
+                      </strong>
+                    </p>
+
+                    {/* Primary Action: Next Chapter */}
+                    {readerNav.nextChapter ? (
+                      <div className="mb-5">
+                        <button
+                          onClick={() =>
+                            readerNav.nextChapter && fetchChapter(readerNav.nextChapter.id)
+                          }
+                          className="w-full sm:w-auto min-w-[280px] inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-white font-display font-bold text-sm sm:text-base shadow-lg shadow-[#E8452C]/25 transition-all cursor-pointer group"
+                        >
+                          <span>
+                            Lanjut ke Bab {readerNav.nextChapter.chapter_number || "Berikutnya"}
+                          </span>
+                          <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1.5 transition-transform" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mb-5 inline-flex items-center gap-2 px-4 py-2 rounded-[6px] bg-[#1C1C1E] border border-[#2A2A2C] text-xs font-mono text-[#8E8B84]">
+                        <span className="text-sm">🎉</span>
+                        <span>Ini adalah bab terbaru yang tersimpan di MangaID!</span>
+                      </div>
+                    )}
+
+                    {/* Secondary Actions */}
+                    <div className="flex flex-wrap items-center justify-center gap-2.5 pt-5 border-t border-[#2A2A2C]/80">
+                      {readerNav.prevChapter && (
+                        <button
+                          onClick={() =>
+                            readerNav.prevChapter && fetchChapter(readerNav.prevChapter.id)
+                          }
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:bg-[#2A2A2C] text-xs font-mono text-[#ECE9E2] transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                          <span>Bab {readerNav.prevChapter.chapter_number || "Sebelumnya"}</span>
+                        </button>
+                      )}
+
+                      {readerNav.currentSeries && (
+                        <button
+                          onClick={() => {
+                            setSelectedSeries(readerNav.currentSeries);
+                            setView("home");
+                            if (typeof window !== "undefined") {
+                              window.history.pushState({}, "", window.location.pathname);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:bg-[#2A2A2C] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                        >
+                          <Layers className="w-3.5 h-3.5 text-[#E8452C]" />
+                          <span>Daftar Bab ({readerNav.currentSeries.totalChapters})</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          if (typeof window !== "undefined") {
+                            window.history.pushState({}, "", window.location.pathname);
+                          }
+                          loadSavedChapters();
+                          setView("home");
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:bg-[#2A2A2C] text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                      >
+                        <Home className="w-3.5 h-3.5" />
+                        <span>Beranda</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
       </div>
@@ -1447,12 +1946,14 @@ export default function MangaIDApp() {
               </div>
 
               <div className="bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] p-3.5 space-y-2">
-                <div className="font-semibold text-[#ECE9E2]">Fitur Tambahan:</div>
+                <div className="font-semibold text-[#ECE9E2]">Fitur & Pintasan Reader:</div>
                 <div className="grid grid-cols-2 gap-2 text-[#8E8B84]">
-                  <div>• Pencarian & filter bab instan</div>
-                  <div>• Webtoon continuous vertical reader</div>
-                  <div>• Export PDF beresolusi tinggi</div>
-                  <div>• Toggle teks asli vs terjemahan</div>
+                  <div>• Navigasi bab otomatis (Next / Prev)</div>
+                  <div>• Mode Webtoon vs Slide tunggal</div>
+                  <div>• Layar Penuh (F / Fullscreen)</div>
+                  <div>• Keyboard panah (←/→ / Space)</div>
+                  <div>• Unduh PDF bab komik</div>
+                  <div>• Switch teks terjemahan vs asli</div>
                 </div>
               </div>
             </div>
