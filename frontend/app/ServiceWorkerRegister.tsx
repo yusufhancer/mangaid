@@ -5,8 +5,12 @@ import { useEffect } from "react";
 export default function ServiceWorkerRegister() {
   useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-        // Auto unregister on localhost so development is never cached
+      if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.hostname.endsWith(".local")
+      ) {
+        // Auto unregister and wipe caches on localhost/dev so changes are always 100% fresh
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           for (const reg of registrations) {
             reg.unregister();
@@ -24,12 +28,35 @@ export default function ServiceWorkerRegister() {
         navigator.serviceWorker
           .register("/sw.js")
           .then((reg) => {
+            // Check for updates
             reg.update();
-            console.log("[MangaID PWA] Service Worker registered:", reg.scope);
+
+            reg.onupdatefound = () => {
+              const installingWorker = reg.installing;
+              if (installingWorker) {
+                installingWorker.onstatechange = () => {
+                  if (
+                    installingWorker.state === "installed" &&
+                    navigator.serviceWorker.controller
+                  ) {
+                    console.log("[MangaID PWA] New version available, activating now...");
+                    installingWorker.postMessage({ type: "SKIP_WAITING" });
+                  }
+                };
+              }
+            };
           })
           .catch((err) => {
             console.error("[MangaID PWA] Service Worker registration failed:", err);
           });
+
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
+        });
       });
     }
   }, []);

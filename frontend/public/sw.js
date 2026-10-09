@@ -1,17 +1,17 @@
 // MangaID Service Worker
-const CACHE_NAME = 'mangaid-cache-v2';
+const CACHE_NAME = 'mangaid-cache-v3';
 
 const STATIC_ASSETS = [
-  '/',
   '/manifest.json',
   '/favicon.ico',
+  '/logo.png',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
   '/icons/icon-maskable-512x512.png',
   '/icons/apple-touch-icon.png'
 ];
 
-// Install: Cache critical shell assets
+// Install: Cache critical shell assets only (never stale HTML)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -21,13 +21,14 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: Clean up old caches
+// Activate: Clean up old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
+            console.log('[MangaID SW] Deleting stale cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -35,6 +36,13 @@ self.addEventListener('activate', (event) => {
     })
   );
   self.clients.claim();
+});
+
+// Listen for skip waiting messages from client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Fetch: Strategy for requests
