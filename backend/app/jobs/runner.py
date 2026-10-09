@@ -182,6 +182,20 @@ async def run_translation_job(
                 if r_path:
                     rec.translated_path = str(r_path)
                 rec.status = r_status
+                # Save translated_text into regions_json for AI Voice Narration (TTS)
+                if rec.regions_json:
+                    try:
+                        regs = json.loads(rec.regions_json)
+                        for r in regs:
+                            r_id = r.get("id")
+                            if r_id is not None:
+                                t_text = translation_map.get((p_idx, int(r_id)))
+                                if t_text:
+                                    r["translated_text"] = t_text
+                        rec.regions_json = json.dumps(regs, ensure_ascii=False)
+                    except Exception as err:
+                        logger.warning("Failed to store translated_text in regions_json for p%d: %s", p_idx, err)
+
 
             job.completed_pages += 1
             db.commit()

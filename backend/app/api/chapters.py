@@ -296,3 +296,75 @@ def update_chapter(chapter_id: str, payload: ChapterUpdateRequest, request: Requ
         "chapter_number": chapter.chapter_number
     }
 
+# ==============================================================================
+# AI VOICE NARRATION (TTS) ENDPOINTS
+# ==============================================================================
+
+@router.get("/{chapter_id}/pages/{page_num}/dialogues")
+def get_page_speech_dialogues(chapter_id: str, page_num: int, db: Session = Depends(get_db)):
+    """
+    Returns ordered speech bubbles and narration texts for a given manga page.
+    """
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found.")
+
+    from ..ai.tts import get_page_dialogues
+    dialogues = get_page_dialogues(chapter_id, page_num, db)
+    return {
+        "chapter_id": chapter_id,
+        "page_number": page_num,
+        "count": len(dialogues),
+        "dialogues": dialogues
+    }
+
+@router.get("/{chapter_id}/pages/{page_num}/audio")
+async def get_page_narration_audio(
+    chapter_id: str,
+    page_num: int,
+    voice: str = "ardi",
+    db: Session = Depends(get_db)
+):
+    """
+    Streams neural AI voice narration (MP3) for an entire manga page.
+    """
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found.")
+
+    from ..ai.tts import get_or_generate_page_audio
+    audio_path = await get_or_generate_page_audio(chapter_id, page_num, voice_key=voice, db=db)
+    if not audio_path or not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Tidak ada dialog yang dapat dibacakan pada halaman ini.")
+
+    return FileResponse(
+        str(audio_path),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+@router.get("/{chapter_id}/tts/bubble")
+async def get_single_bubble_audio(
+    chapter_id: str,
+    text: str,
+    voice: str = "ardi"
+):
+    """
+    Instant tap-to-speak synthesis for a single dialogue bubble.
+    """
+    clean_text = text.strip()
+    if not clean_text:
+        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+
+    from ..ai.tts import synthesize_single_bubble
+    mp3_bytes = await synthesize_single_bubble(clean_text, voice_key=voice)
+    if not mp3_bytes:
+        raise HTTPException(status_code=500, detail="Failed to synthesize speech.")
+
+    return Response(
+        content=mp3_bytes,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+

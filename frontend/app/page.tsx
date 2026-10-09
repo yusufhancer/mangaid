@@ -32,6 +32,10 @@ import {
   Home,
   Smartphone,
   Copy,
+  Headphones,
+  Play,
+  Pause,
+  Volume2,
 } from "lucide-react";
 
 const BACKEND_URL = "";
@@ -208,6 +212,16 @@ export default function MangaIDApp() {
   const [readerMode, setReaderMode] = useState<"vertical" | "single">("vertical");
   const [singlePageIdx, setSinglePageIdx] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // AI Voice Narration (Audiobook) states
+  const [showAudioPlayer, setShowAudioPlayer] = useState(false);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioVoice, setAudioVoice] = useState<"ardi" | "gadis">("ardi");
+  const [audioSpeed, setAudioSpeed] = useState<number>(1.0);
+  const [currentAudioPage, setCurrentAudioPage] = useState<number>(1);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   // PWA states
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -676,6 +690,170 @@ export default function MangaIDApp() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [view, chapterData, readerMode]);
+
+  // AI Voice Narration (Audiobook) Controls
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  const playPageAudio = (pageNum: number, voice: "ardi" | "gadis" = audioVoice, speed: number = audioSpeed) => {
+    if (!chapterData) return;
+    setAudioLoading(true);
+    setAudioError(null);
+    setCurrentAudioPage(pageNum);
+
+    try {
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+      }
+      const audio = audioRef.current;
+      audio.playbackRate = speed;
+
+      const audioUrl = `${BACKEND_URL}/api/chapters/${chapterData.id}/pages/${pageNum}/audio?voice=${voice}&v=${Date.now()}`;
+      audio.src = audioUrl;
+
+      // PWA Media Session API: Background & Lock Screen Controls
+      if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
+        try {
+          (navigator as any).mediaSession.metadata = new (window as any).MediaMetadata({
+            title: `${chapterData.title || "Manga"} — Bab ${chapterData.chapter_number || "1"}`,
+            artist: `MangaID AI Voice (${voice === "gadis" ? "Gadis" : "Ardi"})`,
+            album: `Halaman ${pageNum} dari ${chapterData.pages.length}`,
+            artwork: [
+              { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" }
+            ]
+          });
+          (navigator as any).mediaSession.setActionHandler("play", () => {
+            if (audioRef.current) {
+              audioRef.current.play().then(() => setAudioPlaying(true)).catch(() => {});
+            }
+          });
+          (navigator as any).mediaSession.setActionHandler("pause", () => {
+            if (audioRef.current) {
+              audioRef.current.pause();
+              setAudioPlaying(false);
+            }
+          });
+          (navigator as any).mediaSession.setActionHandler("nexttrack", () => {
+            handleNextAudioPage();
+          });
+          (navigator as any).mediaSession.setActionHandler("previoustrack", () => {
+            handlePrevAudioPage();
+          });
+        } catch (e) {
+          console.warn("MediaSession error:", e);
+        }
+      }
+
+      audio.onended = () => {
+        // Continuous Playback: Auto-advance to next page
+        if (pageNum < chapterData.pages.length) {
+          const nextPage = pageNum + 1;
+          if (readerMode === "single") {
+            setSinglePageIdx(nextPage - 1);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          } else {
+            const el = document.getElementById(`webtoon-page-${nextPage}`);
+            if (el) el.scrollIntoView({ behavior: "smooth" });
+          }
+          playPageAudio(nextPage, voice, speed);
+        } else {
+          setAudioPlaying(false);
+        }
+      };
+
+      audio.onerror = () => {
+        setAudioLoading(false);
+        setAudioPlaying(false);
+        setAudioError("Halaman ini belum memiliki teks dialog.");
+      };
+
+      audio.oncanplay = () => {
+        setAudioLoading(false);
+        audio.play().then(() => {
+          setAudioPlaying(true);
+        }).catch((err) => {
+          console.warn("Audio autoplay blocked:", err);
+          setAudioPlaying(false);
+        });
+      };
+
+      audio.load();
+    } catch (err: any) {
+      setAudioLoading(false);
+      setAudioPlaying(false);
+      setAudioError("Gagal memuat audio narasi.");
+    }
+  };
+
+  const toggleAudioPlayer = () => {
+    if (showAudioPlayer) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      setAudioPlaying(false);
+      setShowAudioPlayer(false);
+    } else {
+      setShowAudioPlayer(true);
+      const targetPage = readerMode === "single" ? singlePageIdx + 1 : 1;
+      playPageAudio(targetPage, audioVoice, audioSpeed);
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (!audioRef.current) {
+      playPageAudio(currentAudioPage, audioVoice, audioSpeed);
+      return;
+    }
+    if (audioPlaying) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+    } else {
+      audioRef.current.play().then(() => setAudioPlaying(true)).catch(() => {});
+    }
+  };
+
+  const handleNextAudioPage = () => {
+    if (!chapterData || currentAudioPage >= chapterData.pages.length) return;
+    const nextP = currentAudioPage + 1;
+    if (readerMode === "single") setSinglePageIdx(nextP - 1);
+    else {
+      const el = document.getElementById(`webtoon-page-${nextP}`);
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
+    playPageAudio(nextP, audioVoice, audioSpeed);
+  };
+
+  const handlePrevAudioPage = () => {
+    if (currentAudioPage <= 1) return;
+    const prevP = currentAudioPage - 1;
+    if (readerMode === "single") setSinglePageIdx(prevP - 1);
+    else {
+      const el = document.getElementById(`webtoon-page-${prevP}`);
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
+    playPageAudio(prevP, audioVoice, audioSpeed);
+  };
+
+  const handleChangeVoice = (v: "ardi" | "gadis") => {
+    setAudioVoice(v);
+    if (showAudioPlayer) {
+      playPageAudio(currentAudioPage, v, audioSpeed);
+    }
+  };
+
+  const handleChangeSpeed = () => {
+    const nextSpeed = audioSpeed === 1.0 ? 1.25 : audioSpeed === 1.25 ? 1.5 : 1.0;
+    setAudioSpeed(nextSpeed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextSpeed;
+    }
+  };
 
   // Series Grouping
   const seriesList: MangaSeries[] = useMemo(() => {
@@ -2040,6 +2218,20 @@ export default function MangaIDApp() {
 
               {/* Right: Mode Switcher, Fullscreen, Language, PDF, Delete */}
               <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                {/* AI Voice Narration (Audiobook) Button */}
+                <button
+                  onClick={toggleAudioPlayer}
+                  className={`flex items-center gap-1.5 min-h-[30px] px-2 sm:px-2.5 py-1 rounded-[6px] border text-xs font-mono transition-all cursor-pointer btn-press ${
+                    showAudioPlayer
+                      ? "bg-[#E8452C] border-[#E8452C] text-white shadow-sm shadow-[#E8452C]/30"
+                      : "bg-[#151516] border-[#2A2A2C] text-[#8E8B84] hover:text-[#ECE9E2] hover:border-[#8E8B84]/40"
+                  }`}
+                  title={showAudioPlayer ? "Tutup Audiobook AI" : "Putar Audiobook AI (Narasi Suara)"}
+                >
+                  <Headphones className={`w-3.5 h-3.5 ${audioPlaying ? "animate-pulse text-white" : ""}`} />
+                  <span className="hidden sm:inline font-semibold">Audiobook</span>
+                </button>
+
                 {/* Mode Baca: Webtoon vs Slide */}
                 <div
                   className="flex items-center bg-[#151516] p-0.5 rounded-[6px] border border-[#2A2A2C]"
@@ -2311,7 +2503,7 @@ export default function MangaIDApp() {
               )}
 
               {/* Floating Single Page Pagination Bar */}
-              {chapterData.pages.length > 0 && (
+              {!showAudioPlayer && chapterData.pages.length > 0 && (
                 <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-[#151516]/95 backdrop-blur-md border border-[#2A2A2C] rounded-full px-4 py-1.5 shadow-2xl flex items-center gap-3 font-mono text-xs text-[#ECE9E2] select-none">
                   <button
                     disabled={singlePageIdx === 0}
@@ -2371,7 +2563,15 @@ export default function MangaIDApp() {
                     : `${BACKEND_URL}${p.original_url}?v=2`;
 
                   return (
-                    <div key={p.page_number} className="w-full relative bg-[#0D0D0E] flex justify-center">
+                    <div
+                      key={p.page_number}
+                      id={`webtoon-page-${p.page_number}`}
+                      className={`w-full relative bg-[#0D0D0E] flex justify-center transition-all ${
+                        showAudioPlayer && currentAudioPage === p.page_number
+                          ? "ring-1 ring-[#E8452C]/50 shadow-lg shadow-[#E8452C]/10"
+                          : ""
+                      }`}
+                    >
                       <img
                         key={`${p.page_number}-${isTrans ? "trans" : "orig"}`}
                         src={imgSrc}
@@ -2468,6 +2668,113 @@ export default function MangaIDApp() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Floating Audiobook Player Control Bar */}
+          {showAudioPlayer && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-xl bg-[#151516]/95 backdrop-blur-md border border-[#E8452C]/50 rounded-full px-4 sm:px-5 py-2.5 shadow-2xl flex items-center justify-between gap-2.5 animate-slide-up text-xs select-none">
+              {/* Left: Play/Pause Button & Status */}
+              <div className="flex items-center gap-2.5 min-w-0">
+                <button
+                  onClick={togglePlayPause}
+                  disabled={audioLoading}
+                  className="w-9 h-9 rounded-full bg-[#E8452C] hover:bg-[#FF5A40] text-white flex items-center justify-center transition-all cursor-pointer btn-press shadow-md shadow-[#E8452C]/30 shrink-0"
+                  title={audioPlaying ? "Jeda" : "Putar"}
+                >
+                  {audioLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : audioPlaying ? (
+                    <Pause className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4 ml-0.5" />
+                  )}
+                </button>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 font-display font-bold text-[#ECE9E2] truncate">
+                    <Headphones className="w-3.5 h-3.5 text-[#E8452C] shrink-0" />
+                    <span>Hal {currentAudioPage}</span>
+                    <span className="text-[10px] font-mono text-[#8E8B84] font-normal">
+                      / {chapterData.pages.length}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-[#8E8B84] font-mono truncate">
+                    {audioLoading
+                      ? "Membuat suara neural..."
+                      : audioError
+                      ? audioError
+                      : audioPlaying
+                      ? `Narasi AI Aktif (${audioVoice === "gadis" ? "Gadis" : "Ardi"})`
+                      : "Dijeda"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Navigation, Voice, Speed, Close */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                {/* Prev / Next Page Buttons */}
+                <button
+                  onClick={handlePrevAudioPage}
+                  disabled={currentAudioPage <= 1}
+                  className="p-1.5 rounded-full hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-30 cursor-pointer btn-press"
+                  title="Halaman Sebelumnya"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleNextAudioPage}
+                  disabled={currentAudioPage >= chapterData.pages.length}
+                  className="p-1.5 rounded-full hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-30 cursor-pointer btn-press"
+                  title="Halaman Berikutnya"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+
+                {/* Voice Switcher (Ardi / Gadis) */}
+                <div className="flex items-center bg-[#111112] border border-[#2A2A2C] rounded-[6px] p-0.5 text-[11px] font-mono">
+                  <button
+                    onClick={() => handleChangeVoice("ardi")}
+                    className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                      audioVoice === "ardi"
+                        ? "bg-[#2A2A2C] text-[#ECE9E2] font-semibold"
+                        : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                    }`}
+                    title="Suara Ardi (Pria / Shounen)"
+                  >
+                    Ardi
+                  </button>
+                  <button
+                    onClick={() => handleChangeVoice("gadis")}
+                    className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                      audioVoice === "gadis"
+                        ? "bg-[#2A2A2C] text-[#ECE9E2] font-semibold"
+                        : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                    }`}
+                    title="Suara Gadis (Wanita / Lembut)"
+                  >
+                    Gadis
+                  </button>
+                </div>
+
+                {/* Speed Switcher */}
+                <button
+                  onClick={handleChangeSpeed}
+                  className="px-2 py-1 rounded-[6px] border border-[#2A2A2C] bg-[#111112] hover:bg-[#1C1C1E] text-[10px] font-mono text-[#ECE9E2] cursor-pointer btn-press"
+                  title="Kecepatan Bicara"
+                >
+                  {audioSpeed}x
+                </button>
+
+                {/* Close Audiobook */}
+                <button
+                  onClick={toggleAudioPlayer}
+                  className="p-1.5 rounded-full hover:bg-[#2A2A2C] text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer ml-0.5"
+                  title="Tutup Audiobook"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
           )}
