@@ -32,6 +32,9 @@ import {
   Home,
   Smartphone,
   Copy,
+  Sparkles,
+  Library,
+  LayoutGrid,
 } from "lucide-react";
 
 const BACKEND_URL = "";
@@ -282,6 +285,126 @@ export default function MangaIDApp() {
     }
   };
 
+  // Shelf Mode (3D Bookshelf vs Grid)
+  const [shelfMode, setShelfMode] = useState<"shelf" | "grid">("shelf");
+
+  // Instant Screenshot (Ctrl+V / Drag-Drop) states
+  const [pastedImageFile, setPastedImageFile] = useState<File | null>(null);
+  const [pastedImagePreview, setPastedImagePreview] = useState<string | null>(null);
+  const [pastedImageTitle, setPastedImageTitle] = useState("");
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [isInstantTranslating, setIsInstantTranslating] = useState(false);
+
+  // Load Shelf Mode from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedMode = localStorage.getItem("mangaid_shelf_mode");
+      if (savedMode === "grid" || savedMode === "shelf") {
+        setShelfMode(savedMode);
+      }
+    }
+  }, []);
+
+  const handleToggleShelfMode = (mode: "shelf" | "grid") => {
+    setShelfMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mangaid_shelf_mode", mode);
+    }
+  };
+
+  // Clipboard paste & Drag-Drop listeners (Zero-lag event-driven)
+  useEffect(() => {
+    let dragCounter = 0;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      // Only intercept image files from clipboard
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf("image") !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            if (pastedImagePreview) URL.revokeObjectURL(pastedImagePreview);
+            const previewUrl = URL.createObjectURL(file);
+            setPastedImageFile(file);
+            setPastedImagePreview(previewUrl);
+            const timeStr = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+            setPastedImageTitle(`Screenshot Manga (${timeStr})`);
+            setShowPasteModal(true);
+            break;
+          }
+        }
+      }
+    };
+
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter++;
+      if (e.dataTransfer?.types?.includes("Files")) {
+        setIsDraggingFile(true);
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        setIsDraggingFile(false);
+        dragCounter = 0;
+      }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter = 0;
+      setIsDraggingFile(false);
+
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith("image/")) {
+          if (pastedImagePreview) URL.revokeObjectURL(pastedImagePreview);
+          const previewUrl = URL.createObjectURL(file);
+          setPastedImageFile(file);
+          setPastedImagePreview(previewUrl);
+          setPastedImageTitle(file.name.replace(/\.[^/.]+$/, "") || "Gambar Unggahan");
+          setShowPasteModal(true);
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragleave", handleDragLeave);
+    window.addEventListener("dragover", handleDragOver);
+    window.addEventListener("drop", handleDrop);
+
+    return () => {
+      window.removeEventListener("paste", handlePaste);
+      window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragleave", handleDragLeave);
+      window.removeEventListener("dragover", handleDragOver);
+      window.removeEventListener("drop", handleDrop);
+    };
+  }, [pastedImagePreview]);
+
+  const handleClosePasteModal = () => {
+    if (pastedImagePreview) {
+      URL.revokeObjectURL(pastedImagePreview);
+      setPastedImagePreview(null);
+    }
+    setPastedImageFile(null);
+    setShowPasteModal(false);
+  };
+
   // Quick test URL
   const SAMPLE_URL = "https://mangadex.org/chapter/e9cfaece-daa1-4830-b239-2d09c407b56b/6";
 
@@ -443,8 +566,10 @@ export default function MangaIDApp() {
   };
 
   // Start Translation Job
-  const handleStartTranslation = async () => {
-    if (!ingestResult) return;
+  const handleStartTranslation = async (overrideSessionId?: string, overridePages?: string[]) => {
+    const targetSessionId = overrideSessionId || ingestResult?.session_id;
+    const targetPages = overridePages || reviewPages;
+    if (!targetSessionId || !targetPages || targetPages.length === 0) return;
 
     setLoading(true);
     setErrorMsg(null);
@@ -454,8 +579,8 @@ export default function MangaIDApp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: ingestResult.session_id,
-          pages: reviewPages,
+          session_id: targetSessionId,
+          pages: targetPages,
           settings: {
             tone,
             honorifics,
@@ -476,6 +601,53 @@ export default function MangaIDApp() {
       setErrorMsg(err.message || "Gagal memulai tugas.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Execute Instant Screenshot Translation (Ctrl+V / Drop)
+  const handleExecuteInstantTranslate = async (goToReview: boolean = false) => {
+    if (!pastedImageFile) return;
+    setIsInstantTranslating(true);
+    setErrorMsg(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("files", pastedImageFile);
+      formData.append("title", pastedImageTitle.trim() || "Screenshot Manga");
+
+      const resp = await apiFetch(`${BACKEND_URL}/api/ingest/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.detail || "Gagal memproses berkas screenshot.");
+      }
+
+      const data: IngestData = await resp.json();
+      setIngestResult(data);
+      const pageUrls = data.pages.map((p) => p.image_url);
+      setReviewPages(pageUrls);
+
+      // Clean up object URL and close modal
+      if (pastedImagePreview) {
+        URL.revokeObjectURL(pastedImagePreview);
+        setPastedImagePreview(null);
+      }
+      setPastedImageFile(null);
+      setShowPasteModal(false);
+
+      if (goToReview) {
+        setView("review");
+      } else {
+        await handleStartTranslation(data.session_id, pageUrls);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Gagal menerjemahkan screenshot.");
+      setShowPasteModal(false);
+    } finally {
+      setIsInstantTranslating(false);
     }
   };
 
@@ -1419,6 +1591,48 @@ export default function MangaIDApp() {
                   </div>
                 )}
 
+                {/* Instant Screenshot Quick Banner (Ctrl+V / Drop) */}
+                <div className="mb-6 p-3 sm:p-3.5 rounded-[8px] bg-gradient-to-r from-[#18181A] via-[#151516] to-[#18181A] border border-[#2A2A2C] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-[6px] bg-[#E8452C]/15 border border-[#E8452C]/30 flex items-center justify-center text-[#E8452C] flex-shrink-0">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#ECE9E2]">
+                          Penerjemah Screenshot Instan
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#E8452C] text-white font-semibold">
+                          HOT
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#8E8B84] mt-0.5">
+                        Tekan <kbd className="px-1.5 py-0.5 rounded bg-[#0D0D0E] border border-[#2A2A2C] font-mono text-[11px] text-[#ECE9E2]">Ctrl + V</kbd> di mana saja atau drag gambar ke layar untuk terjemahkan instan.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="self-start sm:self-auto px-3 py-1.5 rounded-[6px] bg-[#1C1C1E] hover:bg-[#252528] border border-[#2A2A2C] text-xs font-semibold text-[#ECE9E2] cursor-pointer transition-colors flex items-center gap-1.5 shrink-0">
+                    <Upload className="w-3.5 h-3.5 text-[#E8452C]" />
+                    <span>Paste / Pilih Gambar</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0];
+                          if (pastedImagePreview) URL.revokeObjectURL(pastedImagePreview);
+                          setPastedImageFile(file);
+                          setPastedImagePreview(URL.createObjectURL(file));
+                          setPastedImageTitle(file.name.replace(/\.[^/.]+$/, "") || "Gambar Unggahan");
+                          setShowPasteModal(true);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
                 {/* Form Ingest URL */}
                 {inputMode === "url" ? (
                   <div>
@@ -1687,8 +1901,36 @@ export default function MangaIDApp() {
                     </span>
                   </div>
 
-                  {/* Search and Dropdown Filter */}
-                  <div className="flex items-center gap-2">
+                  {/* View Mode Switcher + Search + Filter */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Switcher Toggle */}
+                    <div className="flex items-center p-0.5 rounded-[6px] bg-[#151516] border border-[#2A2A2C]">
+                      <button
+                        onClick={() => handleToggleShelfMode("shelf")}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-xs font-semibold transition-colors cursor-pointer ${
+                          shelfMode === "shelf"
+                            ? "bg-[#1C1C1E] text-[#E8452C] shadow-sm border border-[#2A2A2C]"
+                            : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                        }`}
+                        title="Tampilan Rak Buku 3D"
+                      >
+                        <Library className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Rak 3D</span>
+                      </button>
+                      <button
+                        onClick={() => handleToggleShelfMode("grid")}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-xs font-semibold transition-colors cursor-pointer ${
+                          shelfMode === "grid"
+                            ? "bg-[#1C1C1E] text-[#ECE9E2] shadow-sm border border-[#2A2A2C]"
+                            : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                        }`}
+                        title="Tampilan Kisi / Grid"
+                      >
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Grid</span>
+                      </button>
+                    </div>
+
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 text-[#8E8B84] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.5} />
                       <input
@@ -1696,7 +1938,7 @@ export default function MangaIDApp() {
                         placeholder="Cari judul seri manga..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#151516] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60 w-48 sm:w-60 transition-colors"
+                        className="pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#151516] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60 w-44 sm:w-56 transition-colors"
                       />
                       {searchQuery && (
                         <button
@@ -1719,90 +1961,240 @@ export default function MangaIDApp() {
                   </div>
                 </div>
 
-                {/* Grid of Series Master Cards */}
+                {/* Series Content: Shelf 3D or Grid */}
                 {filteredSeries.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
-                    {filteredSeries.map((series) => (
-                      <div
-                        key={series.title}
-                        className="group flex flex-col bg-[#151516] border border-[#2A2A2C] rounded-[6px] overflow-hidden hover:border-[#8E8B84]/60 transition-colors"
-                      >
-                        {/* 2:3 Cover Thumbnail */}
-                        <div
-                          onClick={() => setSelectedSeries(series)}
-                          className="aspect-[2/3] bg-[#1C1C1E] relative overflow-hidden flex items-center justify-center cursor-pointer"
-                        >
-                          <img
-                            src={`${BACKEND_URL}/api/chapters/${series.coverChapterId}/pages/1/original`}
-                            alt={series.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = "none";
-                            }}
-                          />
-                          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] bg-[#0D0D0E]/85 border border-[#2A2A2C] font-mono text-[10px] text-[#ECE9E2] flex items-center gap-1 shadow-sm">
-                            <Layers className="w-3 h-3 text-[#E8452C]" />
-                            <span>{series.totalChapters} Bab</span>
+                  shelfMode === "shelf" ? (
+                    /* 3D Physical Bookshelf */
+                    <div className="space-y-4">
+                      <div className="relative rounded-[8px] bg-gradient-to-b from-[#131315] via-[#0E0E10] to-[#0A0A0C] border border-[#2A2A2C] p-3 sm:p-5 overflow-hidden shadow-2xl">
+                        {/* Ambient Red Glow on Top */}
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-28 bg-[#E8452C]/10 blur-3xl pointer-events-none rounded-full" />
+
+                        {/* Shelf Header Tag */}
+                        <div className="flex items-center justify-between pb-3 border-b border-[#2A2A2C]/60 text-xs font-mono text-[#8E8B84]">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[#E8452C] animate-pulse" />
+                            <span className="text-[#ECE9E2] font-semibold">Rak Koleksi Tankōbon 3D</span>
                           </div>
+                          <span className="text-[11px] hidden sm:inline">Sentuh / hover buku & klik untuk membuka bab</span>
                         </div>
 
-                        <div className="p-3 flex-1 flex flex-col justify-between">
-                          <div>
-                            <div className="flex items-center justify-between gap-1">
-                              <h4
-                                onClick={() => setSelectedSeries(series)}
-                                className="font-display text-xs font-bold text-[#ECE9E2] truncate flex-1 cursor-pointer hover:text-[#E8452C] transition-colors"
-                                title={series.title}
-                              >
-                                {series.title}
-                              </h4>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenRename({
-                                    type: "series",
-                                    oldTitle: series.title,
-                                    currentTitle: series.title,
-                                  });
-                                }}
-                                className="text-[#8E8B84] hover:text-[#ECE9E2] p-0.5 transition-colors cursor-pointer"
-                                title="Ubah Nama Seri"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
-                            </div>
-                            <div className="font-mono text-[11px] text-[#8E8B84] mt-0.5">
-                              {series.totalRenderedPages}/{series.totalPages} hal selesai
-                            </div>
+                        {/* The Bookshelf Row */}
+                        <div className="relative pt-6 pb-2">
+                          {/* Books row (Pure CSS 3D Transforms, Zero Lag) */}
+                          <div
+                            className="flex items-end gap-3 sm:gap-4 overflow-x-auto pb-7 pt-5 px-3 sm:px-4 scrollbar-thin scrollbar-thumb-[#2A2A2C] scrollbar-track-transparent select-none"
+                            style={{ perspective: "1000px" }}
+                          >
+                            {filteredSeries.map((series, idx) => {
+                              // Dynamic spine thickness based on chapter count
+                              const spineWidth = Math.min(84, Math.max(50, 46 + series.totalChapters * 3));
+                              return (
+                                <div
+                                  key={series.title}
+                                  onClick={() => setSelectedSeries(series)}
+                                  style={{ width: `${spineWidth}px` }}
+                                  className="group/spine relative flex-shrink-0 cursor-pointer select-none transition-all duration-300 ease-out transform hover:-translate-y-5 hover:rotate-[-2deg] active:scale-95 transform-gpu"
+                                >
+                                  {/* Floating Hover Card (Desktop) */}
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-48 bg-[#151516] border border-[#2A2A2C] rounded-[8px] p-2.5 shadow-2xl opacity-0 pointer-events-none group-hover/spine:opacity-100 group-hover/spine:pointer-events-auto transition-opacity duration-200 z-30">
+                                    <div className="aspect-[2/3] w-full rounded-[4px] overflow-hidden bg-[#1C1C1E] mb-2 border border-[#2A2A2C]/60 relative">
+                                      <img
+                                        src={`${BACKEND_URL}/api/chapters/${series.coverChapterId}/pages/1/original`}
+                                        alt={series.title}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = "none";
+                                        }}
+                                      />
+                                      <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-[2px] bg-black/80 font-mono text-[9px] text-[#ECE9E2]">
+                                        {series.totalChapters} Bab
+                                      </div>
+                                    </div>
+                                    <div className="font-display text-xs font-bold text-[#ECE9E2] truncate">
+                                      {series.title}
+                                    </div>
+                                    <div className="text-[10px] font-mono text-[#8E8B84] mt-0.5">
+                                      {series.totalRenderedPages}/{series.totalPages} hal selesai
+                                    </div>
+
+                                    <div className="mt-2 pt-2 border-t border-[#2A2A2C] flex items-center justify-between gap-1">
+                                      <span className="text-[10px] text-[#E8452C] font-semibold flex items-center gap-1">
+                                        <BookOpen className="w-3 h-3" />
+                                        <span>Buka Bab</span>
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenRename({
+                                              type: "series",
+                                              oldTitle: series.title,
+                                              currentTitle: series.title,
+                                            });
+                                          }}
+                                          className="p-1 rounded bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] transition-colors"
+                                          title="Ubah Nama"
+                                        >
+                                          <Pencil className="w-2.5 h-2.5" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setDeleteTarget({
+                                              type: "series",
+                                              title: series.title,
+                                              count: series.totalChapters,
+                                            });
+                                          }}
+                                          className="p-1 rounded bg-[#1C1C1E] text-[#8E8B84] hover:text-[#D4493E] transition-colors"
+                                          title="Hapus Seri"
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* 3D Physical Spine */}
+                                  <div className="relative h-[210px] sm:h-[240px] rounded-t-[4px] rounded-b-[2px] bg-gradient-to-r from-[#202024] via-[#2C2C32] to-[#1C1C1E] border-t border-l border-[#3D3D44] border-r border-[#141416] shadow-[2px_10px_16px_rgba(0,0,0,0.7)] group-hover/spine:shadow-[0_20px_25px_-5px_rgba(0,0,0,0.9),0_0_15px_rgba(232,69,44,0.35)] flex flex-col justify-between p-2 overflow-hidden">
+                                    {/* Texture bevel highlights */}
+                                    <div className="absolute inset-y-0 left-0 w-[3px] bg-white/10 pointer-events-none" />
+                                    <div className="absolute inset-y-0 right-0 w-[4px] bg-black/40 pointer-events-none" />
+
+                                    {/* Spine Top: Index / Badge */}
+                                    <div className="flex flex-col items-center gap-1 z-10">
+                                      <span className="w-5 h-5 rounded-[3px] bg-[#E8452C]/20 border border-[#E8452C]/50 flex items-center justify-center text-[9px] font-mono font-bold text-[#FF5A40]">
+                                        #{idx + 1}
+                                      </span>
+                                    </div>
+
+                                    {/* Spine Center: Vertical Manga Title */}
+                                    <div className="flex-1 flex items-center justify-center my-2 z-10 overflow-hidden">
+                                      <span
+                                        className="text-xs font-bold text-[#ECE9E2] group-hover/spine:text-[#FF5A40] transition-colors tracking-widest line-clamp-1 select-none"
+                                        style={{
+                                          writingMode: "vertical-rl",
+                                          textOrientation: "mixed",
+                                          maxHeight: "140px",
+                                        }}
+                                        title={series.title}
+                                      >
+                                        {series.title}
+                                      </span>
+                                    </div>
+
+                                    {/* Spine Bottom: Chapter count */}
+                                    <div className="flex flex-col items-center gap-0.5 z-10 pt-1 border-t border-white/5">
+                                      <span className="text-[10px] font-mono font-semibold text-[#8E8B84] group-hover/spine:text-[#ECE9E2]">
+                                        {series.totalChapters}B
+                                      </span>
+                                    </div>
+
+                                    {/* Hanging Bookmark Ribbon */}
+                                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2.5 h-3 bg-[#E8452C] rounded-b-[2px] opacity-85 shadow-sm" />
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
 
-                          <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-[#2A2A2C]">
-                            <button
-                              onClick={() => setSelectedSeries(series)}
-                              className="flex-1 min-h-[36px] py-1.5 px-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                            >
-                              <BookOpen className="w-3.5 h-3.5" />
-                              <span>Buka Bab ({series.totalChapters})</span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteTarget({
-                                  type: "series",
-                                  title: series.title,
-                                  count: series.totalChapters,
-                                });
-                              }}
-                              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-[6px] border border-[#2A2A2C] hover:border-[#D4493E]/60 hover:bg-[#D4493E]/10 text-[#8E8B84] hover:text-[#D4493E] transition-colors cursor-pointer"
-                              title="Hapus Seluruh Seri"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                            </button>
+                          {/* Realistic Wooden / Metallic Shelf Plank */}
+                          <div className="relative w-full">
+                            <div className="h-[6px] w-full bg-gradient-to-r from-[#242428] via-[#323238] to-[#242428] rounded-t-[2px] border-t border-white/10 shadow-sm" />
+                            <div className="h-[14px] w-full bg-gradient-to-b from-[#1C1C1E] to-[#111112] border-x border-b border-[#2A2A2C] shadow-[0_12px_24px_rgba(0,0,0,0.85)] flex items-center justify-between px-3">
+                              <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-[#E8452C]/30 to-transparent" />
+                            </div>
+                            <div className="h-4 w-full bg-gradient-to-b from-black/50 to-transparent pointer-events-none" />
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ) : (
+                    /* Grid of Series Master Cards */
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
+                      {filteredSeries.map((series) => (
+                        <div
+                          key={series.title}
+                          className="group flex flex-col bg-[#151516] border border-[#2A2A2C] rounded-[6px] overflow-hidden hover:border-[#8E8B84]/60 transition-colors"
+                        >
+                          {/* 2:3 Cover Thumbnail */}
+                          <div
+                            onClick={() => setSelectedSeries(series)}
+                            className="aspect-[2/3] bg-[#1C1C1E] relative overflow-hidden flex items-center justify-center cursor-pointer"
+                          >
+                            <img
+                              src={`${BACKEND_URL}/api/chapters/${series.coverChapterId}/pages/1/original`}
+                              alt={series.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = "none";
+                              }}
+                            />
+                            <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] bg-[#0D0D0E]/85 border border-[#2A2A2C] font-mono text-[10px] text-[#ECE9E2] flex items-center gap-1 shadow-sm">
+                              <Layers className="w-3 h-3 text-[#E8452C]" />
+                              <span>{series.totalChapters} Bab</span>
+                            </div>
+                          </div>
+
+                          <div className="p-3 flex-1 flex flex-col justify-between">
+                            <div>
+                              <div className="flex items-center justify-between gap-1">
+                                <h4
+                                  onClick={() => setSelectedSeries(series)}
+                                  className="font-display text-xs font-bold text-[#ECE9E2] truncate flex-1 cursor-pointer hover:text-[#E8452C] transition-colors"
+                                  title={series.title}
+                                >
+                                  {series.title}
+                                </h4>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenRename({
+                                      type: "series",
+                                      oldTitle: series.title,
+                                      currentTitle: series.title,
+                                    });
+                                  }}
+                                  className="text-[#8E8B84] hover:text-[#ECE9E2] p-0.5 transition-colors cursor-pointer"
+                                  title="Ubah Nama Seri"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              </div>
+                              <div className="font-mono text-[11px] text-[#8E8B84] mt-0.5">
+                                {series.totalRenderedPages}/{series.totalPages} hal selesai
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-[#2A2A2C]">
+                              <button
+                                onClick={() => setSelectedSeries(series)}
+                                className="flex-1 min-h-[36px] py-1.5 px-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span>Buka Bab ({series.totalChapters})</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteTarget({
+                                    type: "series",
+                                    title: series.title,
+                                    count: series.totalChapters,
+                                  });
+                                }}
+                                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-[6px] border border-[#2A2A2C] hover:border-[#D4493E]/60 hover:bg-[#D4493E]/10 text-[#8E8B84] hover:text-[#D4493E] transition-colors cursor-pointer"
+                                title="Hapus Seluruh Seri"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 ) : (
                   <div className="p-8 text-center rounded-[6px] border border-[#2A2A2C] bg-[#151516] text-[#8E8B84] text-xs">
                     {searchQuery ? `Tidak ada seri manga yang cocok dengan kata kunci "${searchQuery}".` : "Belum ada manga yang tersimpan."}
@@ -1833,7 +2225,7 @@ export default function MangaIDApp() {
                 Batal
               </button>
               <button
-                onClick={handleStartTranslation}
+                onClick={() => handleStartTranslation()}
                 disabled={loading || reviewPages.length === 0}
                 className={`px-4 py-2 min-h-[40px] rounded-[6px] text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
                   reviewPages.length > 0 && !loading
@@ -3105,6 +3497,120 @@ export default function MangaIDApp() {
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Ya, Hapus</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-screen Drag & Drop Overlay */}
+      {isDraggingFile && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 border-4 border-dashed border-[#E8452C] pointer-events-none select-none animate-in fade-in duration-150">
+          <div className="w-20 h-20 rounded-full bg-[#E8452C]/20 border border-[#E8452C] flex items-center justify-center text-[#E8452C] mb-4 animate-bounce">
+            <Upload className="w-10 h-10" />
+          </div>
+          <h2 className="font-display text-2xl font-bold text-[#ECE9E2] mb-2 text-center">
+            Lepaskan Gambar Komik ke Sini
+          </h2>
+          <p className="text-sm text-[#8E8B84] text-center max-w-md">
+            MangaID akan langsung membaca dan menerjemahkan screenshot manga ke Bahasa Indonesia!
+          </p>
+        </div>
+      )}
+
+      {/* Instant Screenshot (Ctrl+V / Drop) Modal */}
+      {showPasteModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-lg w-full p-5 sm:p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={handleClosePasteModal}
+              className="absolute top-4 right-4 text-[#8E8B84] hover:text-[#ECE9E2] transition-colors p-1 rounded-[4px] cursor-pointer"
+            >
+              <X className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-[6px] bg-[#E8452C]/15 border border-[#E8452C]/40 flex items-center justify-center text-[#E8452C] flex-shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display text-base font-bold text-[#ECE9E2]">
+                    Terjemahan Screenshot Instan
+                  </h3>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#E8452C] text-white font-semibold">
+                    Ctrl + V
+                  </span>
+                </div>
+                <p className="text-xs text-[#8E8B84]">
+                  Screenshot gambar terdeteksi dari papan klip / drag-drop
+                </p>
+              </div>
+            </div>
+
+            {/* Preview Image with Laser Scanline effect */}
+            <div className="relative rounded-[6px] overflow-hidden bg-[#0D0D0E] border border-[#2A2A2C] mb-4 max-h-64 flex items-center justify-center">
+              {pastedImagePreview && (
+                <img
+                  src={pastedImagePreview}
+                  alt="Screenshot Preview"
+                  className="max-h-64 w-auto object-contain mx-auto"
+                />
+              )}
+              {/* Subtle futuristic scanline indicator */}
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#E8452C] to-transparent animate-pulse pointer-events-none" />
+            </div>
+
+            {/* Title Input */}
+            <div className="mb-5">
+              <label className="block text-xs font-semibold text-[#ECE9E2] mb-1.5">
+                Judul Chapter / Catatan:
+              </label>
+              <input
+                type="text"
+                value={pastedImageTitle}
+                onChange={(e) => setPastedImageTitle(e.target.value)}
+                placeholder="Contoh: One Piece Spoiler Ch 1120"
+                className="w-full px-3 py-2 text-xs rounded-[6px] bg-[#0D0D0E] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleClosePasteModal}
+                disabled={isInstantTranslating}
+                className="w-full sm:w-auto px-4 py-2 rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer text-center"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExecuteInstantTranslate(true)}
+                disabled={isInstantTranslating}
+                className="w-full sm:w-auto px-4 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:bg-[#2A2A2C] text-xs font-semibold text-[#ECE9E2] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Tinjau Dulu</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExecuteInstantTranslate(false)}
+                disabled={isInstantTranslating}
+                className="w-full sm:w-auto px-5 py-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-xs font-bold text-white transition-all shadow-md shadow-[#E8452C]/20 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {isInstantTranslating ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menerjemahkan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>⚡ Terjemahkan Instan</span>
                   </>
                 )}
               </button>
