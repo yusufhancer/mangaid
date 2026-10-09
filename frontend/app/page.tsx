@@ -1122,8 +1122,8 @@ export default function MangaIDApp() {
 
         {/* Settings Modal Drawer */}
         {showSettings && (
-          <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-            <div className="bg-[#151516] border border-[#2A2A2C] rounded-[6px] max-w-md w-full p-6 shadow-xl relative">
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-md w-full p-6 shadow-2xl relative animate-scale-in">
               <button
                 onClick={() => setShowSettings(false)}
                 className="absolute top-4 right-4 text-[#8E8B84] hover:text-[#ECE9E2] transition-colors p-1 rounded-[4px] cursor-pointer"
@@ -1142,9 +1142,9 @@ export default function MangaIDApp() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setTone("gaul")}
-                      className={`p-3 rounded-[6px] border text-left text-xs transition-colors ${
+                      className={`p-3 rounded-[6px] border text-left text-xs transition-all cursor-pointer ${
                         tone === "gaul"
-                          ? "border-[#E8452C] bg-[#1C1C1E] text-[#ECE9E2]"
+                          ? "border-[#E8452C] bg-[#1C1C1E] text-[#ECE9E2] shadow-sm shadow-[#E8452C]/10"
                           : "border-[#2A2A2C] bg-[#151516] text-[#8E8B84] hover:border-[#8E8B84]/40"
                       }`}
                     >
@@ -1153,9 +1153,9 @@ export default function MangaIDApp() {
                     </button>
                     <button
                       onClick={() => setTone("neutral")}
-                      className={`p-3 rounded-[6px] border text-left text-xs transition-colors ${
+                      className={`p-3 rounded-[6px] border text-left text-xs transition-all cursor-pointer ${
                         tone === "neutral"
-                          ? "border-[#E8452C] bg-[#1C1C1E] text-[#ECE9E2]"
+                          ? "border-[#E8452C] bg-[#1C1C1E] text-[#ECE9E2] shadow-sm shadow-[#E8452C]/10"
                           : "border-[#2A2A2C] bg-[#151516] text-[#8E8B84] hover:border-[#8E8B84]/40"
                       }`}
                     >
@@ -1172,9 +1172,9 @@ export default function MangaIDApp() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setHonorifics("keep")}
-                      className={`p-2.5 rounded-[6px] border text-xs font-medium transition-colors ${
+                      className={`p-2.5 rounded-[6px] border text-xs font-medium transition-all cursor-pointer ${
                         honorifics === "keep"
-                          ? "border-[#E8452C] bg-[#1C1C1E] text-[#ECE9E2]"
+                          ? "border-[#E8452C] bg-[#1C1C1E] text-[#ECE9E2] shadow-sm shadow-[#E8452C]/10"
                           : "border-[#2A2A2C] bg-[#151516] text-[#8E8B84] hover:border-[#8E8B84]/40"
                       }`}
                     >
@@ -1182,9 +1182,9 @@ export default function MangaIDApp() {
                     </button>
                     <button
                       onClick={() => setHonorifics("drop")}
-                      className={`p-2.5 rounded-[6px] border text-xs font-medium transition-colors ${
+                      className={`p-2.5 rounded-[6px] border text-xs font-medium transition-all cursor-pointer ${
                         honorifics === "drop"
-                          ? "border-[#E8452C] bg-[#1C1C1E] text-[#ECE9E2]"
+                          ? "border-[#E8452C] bg-[#1C1C1E] text-[#ECE9E2] shadow-sm shadow-[#E8452C]/10"
                           : "border-[#2A2A2C] bg-[#151516] text-[#8E8B84] hover:border-[#8E8B84]/40"
                       }`}
                     >
@@ -1212,7 +1212,7 @@ export default function MangaIDApp() {
                     </div>
                     <button
                       onClick={handleCopyDeviceId}
-                      className="px-3 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#8E8B84] text-xs font-medium text-[#ECE9E2] transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+                      className="px-3 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#8E8B84] text-xs font-medium text-[#ECE9E2] transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 btn-press"
                       title="Salin ID Perangkat"
                     >
                       {copiedId ? <Check className="w-3.5 h-3.5 text-[#4FA36B]" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1223,7 +1223,7 @@ export default function MangaIDApp() {
                         setSyncIdInput(deviceId);
                         setShowSyncModal(true);
                       }}
-                      className="px-3 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#8E8B84] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer shrink-0"
+                      className="px-3 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#8E8B84] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer shrink-0 btn-press"
                       title="Ganti atau Sinkronkan ID"
                     >
                       Sinkron
@@ -1234,7 +1234,7 @@ export default function MangaIDApp() {
 
               <button
                 onClick={() => setShowSettings(false)}
-                className="mt-6 w-full py-2.5 min-h-[44px] rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] font-semibold text-xs text-white transition-colors cursor-pointer"
+                className="mt-6 w-full py-2.5 min-h-[44px] rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] font-semibold text-xs text-white transition-all cursor-pointer btn-press shadow-md shadow-[#E8452C]/20"
               >
                 Simpan & Tutup
               </button>
@@ -1244,8 +1244,8 @@ export default function MangaIDApp() {
 
         {/* Device Sync Modal */}
         {showSyncModal && (
-          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-            <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-md w-full p-6 shadow-2xl relative">
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-md w-full p-6 shadow-2xl relative animate-scale-in">
               <button
                 onClick={() => setShowSyncModal(false)}
                 className="absolute top-4 right-4 text-[#8E8B84] hover:text-[#ECE9E2] transition-colors p-1 rounded-[4px] cursor-pointer"
@@ -1269,7 +1269,7 @@ export default function MangaIDApp() {
                     value={syncIdInput}
                     onChange={(e) => setSyncIdInput(e.target.value)}
                     placeholder="Contoh: dev-xxxx-xxxx"
-                    className="w-full px-3 py-2.5 rounded-[6px] bg-[#111112] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none font-mono text-xs text-[#ECE9E2]"
+                    className="w-full px-3 py-2.5 rounded-[6px] bg-[#111112] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none font-mono text-xs text-[#ECE9E2] transition-colors"
                   />
                 </div>
 
@@ -1277,13 +1277,13 @@ export default function MangaIDApp() {
                   <button
                     onClick={() => handleApplySyncId(syncIdInput)}
                     disabled={!syncIdInput.trim()}
-                    className="flex-1 py-2.5 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] disabled:opacity-50 font-semibold text-xs text-white transition-colors cursor-pointer"
+                    className="flex-1 py-2.5 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] disabled:opacity-50 font-semibold text-xs text-white transition-all cursor-pointer btn-press shadow-md shadow-[#E8452C]/20"
                   >
                     Terapkan & Muat Rak
                   </button>
                   <button
                     onClick={handleResetDeviceId}
-                    className="py-2.5 px-3 rounded-[6px] border border-[#2A2A2C] hover:border-[#D4493E] hover:text-[#D4493E] text-xs font-mono text-[#8E8B84] transition-colors cursor-pointer shrink-0"
+                    className="py-2.5 px-3 rounded-[6px] border border-[#2A2A2C] hover:border-[#D4493E] hover:text-[#D4493E] text-xs font-mono text-[#8E8B84] transition-all cursor-pointer shrink-0 btn-press"
                     title="Buat ID Perangkat Baru"
                   >
                     Reset Baru
@@ -1298,10 +1298,10 @@ export default function MangaIDApp() {
         <div className={`flex-1 flex flex-col ${view === "reader" ? "" : "pb-20 lg:pb-8"}`}>
           {/* VIEW 1: HOME */}
           {view === "home" && (
-            <main className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-7xl w-full mx-auto flex flex-col">
+            <main className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-7xl w-full mx-auto flex flex-col animate-fade-in">
               {/* PWA Install Notification Banner */}
               {!isAppInstalled && showInstallBanner && (
-                <div className="p-4 rounded-[8px] bg-gradient-to-r from-[#1C1312] via-[#151516] to-[#151516] border border-[#E8452C]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+                <div className="p-4 rounded-[8px] bg-gradient-to-r from-[#1C1312] via-[#151516] to-[#151516] border border-[#E8452C]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg animate-slide-up">
                   <div className="flex items-center gap-3">
                     <img
                       src="/logo.png"
@@ -1323,13 +1323,13 @@ export default function MangaIDApp() {
                   <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
                     <button
                       onClick={() => setShowInstallBanner(false)}
-                      className="text-xs text-[#8E8B84] hover:text-[#ECE9E2] px-3 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] cursor-pointer"
+                      className="text-xs text-[#8E8B84] hover:text-[#ECE9E2] px-3 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] cursor-pointer transition-colors btn-press"
                     >
                       Nanti Saja
                     </button>
                     <button
                       onClick={handleInstallPWA}
-                      className="text-xs font-semibold text-white bg-[#E8452C] hover:bg-[#FF5A40] px-4 py-1.5 rounded-[6px] transition-colors flex items-center gap-1.5 shadow-md shadow-[#E8452C]/20 cursor-pointer"
+                      className="text-xs font-semibold text-white bg-[#E8452C] hover:bg-[#FF5A40] px-4 py-1.5 rounded-[6px] transition-all flex items-center gap-1.5 shadow-md shadow-[#E8452C]/20 cursor-pointer btn-press"
                     >
                       <Download className="w-3.5 h-3.5" />
                       Install Sekarang
@@ -1346,7 +1346,7 @@ export default function MangaIDApp() {
                   <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0">
                     <button
                       onClick={() => setInputMode("url")}
-                      className={`pb-2 text-xs font-semibold tracking-wide transition-colors relative cursor-pointer flex-shrink-0 ${
+                      className={`pb-2 text-xs font-semibold tracking-wide transition-all relative cursor-pointer flex-shrink-0 ${
                         inputMode === "url"
                           ? "text-[#ECE9E2] border-b-2 border-[#E8452C] -mb-[18px]"
                           : "text-[#8E8B84] hover:text-[#ECE9E2]"
@@ -1356,7 +1356,7 @@ export default function MangaIDApp() {
                     </button>
                     <button
                       onClick={() => setInputMode("upload")}
-                      className={`pb-2 text-xs font-semibold tracking-wide transition-colors relative cursor-pointer flex-shrink-0 ${
+                      className={`pb-2 text-xs font-semibold tracking-wide transition-all relative cursor-pointer flex-shrink-0 ${
                         inputMode === "upload"
                           ? "text-[#ECE9E2] border-b-2 border-[#E8452C] -mb-[18px]"
                           : "text-[#8E8B84] hover:text-[#ECE9E2]"
@@ -1366,7 +1366,7 @@ export default function MangaIDApp() {
                     </button>
                     <button
                       onClick={() => setInputMode("explorer")}
-                      className={`pb-2 text-xs font-semibold tracking-wide transition-colors relative cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
+                      className={`pb-2 text-xs font-semibold tracking-wide transition-all relative cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
                         inputMode === "explorer"
                           ? "text-[#ECE9E2] border-b-2 border-[#E8452C] -mb-[18px]"
                           : "text-[#8E8B84] hover:text-[#ECE9E2]"
@@ -1380,7 +1380,7 @@ export default function MangaIDApp() {
                   {/* Single Tone Selector on the entire screen */}
                   <button
                     onClick={() => setShowSettings(!showSettings)}
-                    className="self-start sm:self-auto flex items-center gap-1.5 text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] px-3 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#8E8B84]/50 transition-colors cursor-pointer"
+                    className="self-start sm:self-auto flex items-center gap-1.5 text-xs font-mono text-[#8E8B84] hover:text-[#ECE9E2] px-3 py-1.5 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#8E8B84]/50 transition-all cursor-pointer btn-press"
                   >
                     <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
                     <span>
@@ -1413,7 +1413,7 @@ export default function MangaIDApp() {
 
                 {/* Error Message Alert */}
                 {errorMsg && (
-                  <div className="w-full mb-5 p-3.5 rounded-[6px] bg-[#1C1C1E] border border-[#D4493E] text-[#ECE9E2] text-xs flex items-center gap-2.5">
+                  <div className="w-full mb-5 p-3.5 rounded-[6px] bg-[#1C1C1E] border border-[#D4493E] text-[#ECE9E2] text-xs flex items-center gap-2.5 animate-slide-up">
                     <AlertCircle className="w-4 h-4 text-[#D4493E] flex-shrink-0" strokeWidth={1.5} />
                     <div className="flex-1">{errorMsg}</div>
                   </div>
@@ -1444,9 +1444,9 @@ export default function MangaIDApp() {
                         type="button"
                         onClick={() => handleIngestUrl()}
                         disabled={loading || !urlInput.trim()}
-                        className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
+                        className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 flex-shrink-0 btn-press ${
                           urlInput.trim() && !loading
-                            ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer"
+                            ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer shadow-md shadow-[#E8452C]/20"
                             : "bg-[#1C1C1E] border border-[#2A2A2C] text-[#8E8B84] cursor-not-allowed"
                         }`}
                       >
@@ -1507,9 +1507,9 @@ export default function MangaIDApp() {
                       <button
                         type="submit"
                         disabled={loading || !selectedFiles || selectedFiles.length === 0}
-                        className={`px-5 py-2.5 min-h-[44px] rounded-[6px] text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 flex-shrink-0 ${
+                        className={`px-5 py-2.5 min-h-[44px] rounded-[6px] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 flex-shrink-0 btn-press ${
                           selectedFiles && selectedFiles.length > 0 && !loading
-                            ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer"
+                            ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer shadow-md shadow-[#E8452C]/20"
                             : "bg-[#1C1C1E] border border-[#2A2A2C] text-[#8E8B84] cursor-not-allowed"
                         }`}
                       >
@@ -1551,9 +1551,9 @@ export default function MangaIDApp() {
                       <button
                         type="submit"
                         disabled={explorerLoading || !explorerQuery.trim()}
-                        className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
+                        className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 flex-shrink-0 btn-press ${
                           explorerQuery.trim() && !explorerLoading
-                            ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer"
+                            ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer shadow-md shadow-[#E8452C]/20"
                             : "bg-[#1C1C1E] border border-[#2A2A2C] text-[#8E8B84] cursor-not-allowed"
                         }`}
                       >
@@ -1582,7 +1582,7 @@ export default function MangaIDApp() {
                             setExplorerQuery(tag);
                             handleSearchManga(tag);
                           }}
-                          className="px-2.5 py-1 rounded-full bg-[#1C1C1E] border border-[#2A2A2C] hover:border-[#E8452C]/60 hover:text-[#ECE9E2] text-[#8E8B84] transition-colors text-xs cursor-pointer"
+                          className="px-2.5 py-1 rounded-full bg-[#1C1C1E] border border-[#2A2A2C] hover:border-[#E8452C]/60 hover:text-[#ECE9E2] text-[#8E8B84] transition-all text-xs cursor-pointer btn-press hover:scale-105"
                         >
                           {tag}
                         </button>
@@ -1591,12 +1591,12 @@ export default function MangaIDApp() {
 
                     {/* Explorer Results Display */}
                     {explorerLoading ? (
-                      <div className="py-12 flex flex-col items-center justify-center gap-3 text-[#8E8B84]">
+                      <div className="py-12 flex flex-col items-center justify-center gap-3 text-[#8E8B84] animate-fade-in">
                         <RefreshCw className="w-6 h-6 animate-spin text-[#E8452C]" />
-                        <span className="text-xs font-mono">Menghubungi katalog resmi MangaDex...</span>
+                        <span className="text-xs font-mono animate-pulse-subtle">Menghubungi katalog resmi MangaDex...</span>
                       </div>
                     ) : explorerResults.length > 0 ? (
-                      <div className="pt-2">
+                      <div className="pt-2 animate-fade-in">
                         <div className="text-xs text-[#8E8B84] font-mono mb-3">
                           Ditemukan {explorerResults.length} hasil untuk "{explorerQuery}":
                         </div>
@@ -1605,7 +1605,7 @@ export default function MangaIDApp() {
                             <div
                               key={manga.id}
                               onClick={() => handleSelectManga(manga)}
-                              className="group flex flex-col rounded-[6px] border border-[#2A2A2C] hover:border-[#E8452C] bg-[#111112] overflow-hidden transition-all duration-200 hover:-translate-y-1 shadow-sm hover:shadow-md cursor-pointer"
+                              className="group flex flex-col rounded-[6px] border border-[#2A2A2C] bg-[#111112] overflow-hidden card-lift cursor-pointer"
                             >
                               {/* Cover Poster */}
                               <div className="aspect-[3/4] relative bg-[#1C1C1E] overflow-hidden">
@@ -1615,7 +1615,7 @@ export default function MangaIDApp() {
                                     alt={manga.title}
                                     loading="lazy"
                                     referrerPolicy="no-referrer"
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
                                     onError={(e) => {
                                       (e.target as HTMLElement).style.display = "none";
                                     }}
@@ -1725,7 +1725,7 @@ export default function MangaIDApp() {
                     {filteredSeries.map((series) => (
                       <div
                         key={series.title}
-                        className="group flex flex-col bg-[#151516] border border-[#2A2A2C] rounded-[6px] overflow-hidden hover:border-[#8E8B84]/60 transition-colors"
+                        className="group flex flex-col bg-[#151516] border border-[#2A2A2C] rounded-[6px] overflow-hidden card-lift"
                       >
                         {/* 2:3 Cover Thumbnail */}
                         <div
@@ -1735,12 +1735,12 @@ export default function MangaIDApp() {
                           <img
                             src={`${BACKEND_URL}/api/chapters/${series.coverChapterId}/pages/1/original`}
                             alt={series.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = "none";
                             }}
                           />
-                          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] bg-[#0D0D0E]/85 border border-[#2A2A2C] font-mono text-[10px] text-[#ECE9E2] flex items-center gap-1 shadow-sm">
+                          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] bg-[#0D0D0E]/85 border border-[#2A2A2C] font-mono text-[10px] text-[#ECE9E2] flex items-center gap-1 shadow-sm transition-transform group-hover:scale-105">
                             <Layers className="w-3 h-3 text-[#E8452C]" />
                             <span>{series.totalChapters} Bab</span>
                           </div>
@@ -1765,7 +1765,7 @@ export default function MangaIDApp() {
                                     currentTitle: series.title,
                                   });
                                 }}
-                                className="text-[#8E8B84] hover:text-[#ECE9E2] p-0.5 transition-colors cursor-pointer"
+                                className="text-[#8E8B84] hover:text-[#ECE9E2] p-0.5 transition-colors cursor-pointer btn-press"
                                 title="Ubah Nama Seri"
                               >
                                 <Pencil className="w-3 h-3" />
@@ -1779,7 +1779,7 @@ export default function MangaIDApp() {
                           <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-[#2A2A2C]">
                             <button
                               onClick={() => setSelectedSeries(series)}
-                              className="flex-1 min-h-[36px] py-1.5 px-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                              className="flex-1 min-h-[36px] py-1.5 px-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 btn-press shadow-sm hover:shadow-md hover:shadow-[#E8452C]/20"
                             >
                               <BookOpen className="w-3.5 h-3.5" />
                               <span>Buka Bab ({series.totalChapters})</span>
@@ -1793,7 +1793,7 @@ export default function MangaIDApp() {
                                   count: series.totalChapters,
                                 });
                               }}
-                              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-[6px] border border-[#2A2A2C] hover:border-[#D4493E]/60 hover:bg-[#D4493E]/10 text-[#8E8B84] hover:text-[#D4493E] transition-colors cursor-pointer"
+                              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-[6px] border border-[#2A2A2C] hover:border-[#D4493E]/60 hover:bg-[#D4493E]/10 text-[#8E8B84] hover:text-[#D4493E] transition-all cursor-pointer btn-press"
                               title="Hapus Seluruh Seri"
                             >
                               <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -1814,7 +1814,7 @@ export default function MangaIDApp() {
 
       {/* VIEW 2: REVIEW DETECTED PAGES */}
       {view === "review" && ingestResult && (
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-3 mb-6 pb-4 border-b border-[#2A2A2C]">
             <div>
               <h2 className="font-display text-xl font-bold text-[#ECE9E2]">
@@ -1828,16 +1828,16 @@ export default function MangaIDApp() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setView("home")}
-                className="px-3.5 py-2 min-h-[40px] rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer flex items-center justify-center"
+                className="px-3.5 py-2 min-h-[40px] rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer flex items-center justify-center btn-press"
               >
                 Batal
               </button>
               <button
                 onClick={handleStartTranslation}
                 disabled={loading || reviewPages.length === 0}
-                className={`px-4 py-2 min-h-[40px] rounded-[6px] text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+                className={`px-4 py-2 min-h-[40px] rounded-[6px] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 btn-press ${
                   reviewPages.length > 0 && !loading
-                    ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer"
+                    ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer shadow-md shadow-[#E8452C]/20"
                     : "bg-[#1C1C1E] border border-[#2A2A2C] text-[#8E8B84] cursor-not-allowed"
                 }`}
               >
@@ -1858,13 +1858,13 @@ export default function MangaIDApp() {
             {reviewPages.map((imgUrl, idx) => (
               <div
                 key={idx}
-                className="group relative bg-[#151516] border border-[#2A2A2C] hover:border-[#E8452C] rounded-[6px] overflow-hidden transition-colors flex flex-col"
+                className="group relative bg-[#151516] border border-[#2A2A2C] hover:border-[#E8452C] rounded-[6px] overflow-hidden transition-all flex flex-col card-lift"
               >
                 <div className="aspect-[3/4] bg-[#1C1C1E] overflow-hidden relative">
                   <img
                     src={resolveProxyImage(imgUrl)}
                     alt={`Halaman ${idx + 1}`}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
                     loading="lazy"
                     referrerPolicy="no-referrer"
                   />
@@ -1878,7 +1878,7 @@ export default function MangaIDApp() {
                     <button
                       onClick={() => movePage(idx, "left")}
                       disabled={idx === 0}
-                      className="p-1 text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-20 cursor-pointer"
+                      className="p-1 text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-20 cursor-pointer btn-press"
                       title="Geser Kiri"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -1886,7 +1886,8 @@ export default function MangaIDApp() {
                     <button
                       onClick={() => movePage(idx, "right")}
                       disabled={idx === reviewPages.length - 1}
-                      className="p-1 text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-20 cursor-pointer"
+                      className="p-1 text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-20 cursor-pointer btn-press"
+                      title="Geser Kiri"
                     >
                       <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.5} />
                     </button>
@@ -1894,7 +1895,7 @@ export default function MangaIDApp() {
 
                   <button
                     onClick={() => removePage(idx)}
-                    className="p-1 text-[#8E8B84] hover:text-[#D4493E] cursor-pointer"
+                    className="p-1 text-[#8E8B84] hover:text-[#D4493E] cursor-pointer btn-press"
                     title="Hapus Halaman"
                   >
                     <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -1908,21 +1909,21 @@ export default function MangaIDApp() {
 
       {/* VIEW 3: PROGRESS */}
       {view === "progress" && (
-        <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-16 flex flex-col items-center justify-center">
-          <div className="w-full max-w-md bg-[#151516] border border-[#2A2A2C] rounded-[6px] p-6">
+        <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-16 flex flex-col items-center justify-center animate-fade-in">
+          <div className="w-full max-w-md bg-[#151516] border border-[#2A2A2C] rounded-[8px] p-6 shadow-2xl animate-scale-in">
             <div className="flex items-baseline justify-between mb-4">
               <h3 className="font-display text-base font-bold text-[#ECE9E2]">
                 Memproses Terjemahan
               </h3>
-              <span className="font-mono text-xs text-[#8E8B84] uppercase">
+              <span className="font-mono text-xs text-[#E8452C] uppercase animate-pulse-subtle font-semibold">
                 {jobStatus?.stage || "MENYIAPKAN"}
               </span>
             </div>
 
-            {/* Flat Thin Vermilion Progress Bar */}
-            <div className="w-full bg-[#1C1C1E] h-1.5 rounded-[3px] overflow-hidden my-4">
+            {/* Flat Thin Vermilion Progress Bar with Running Light Shimmer */}
+            <div className="w-full bg-[#1C1C1E] h-2 rounded-[4px] overflow-hidden my-4 border border-[#2A2A2C]/60">
               <div
-                className="bg-[#E8452C] h-full transition-all duration-300"
+                className="shimmer-progress h-full transition-all duration-300 rounded-[3px]"
                 style={{
                   width: `${
                     jobStatus?.total_pages
@@ -1943,7 +1944,7 @@ export default function MangaIDApp() {
                   ? `Render: ${jobStatus.completed_pages} / ${jobStatus.total_pages}`
                   : `Halaman: ${jobStatus?.current_page || 1} / ${jobStatus?.total_pages || "?"}`}
               </span>
-              <span>
+              <span className="text-[#ECE9E2] font-semibold">
                 {jobStatus?.total_pages
                   ? `${Math.round(
                       ((jobStatus.completed_pages || jobStatus.current_page || 1) /
@@ -1955,7 +1956,7 @@ export default function MangaIDApp() {
             </div>
 
             {errorMsg && (
-              <div className="mt-4 p-3 rounded-[6px] bg-[#1C1C1E] border border-[#D4493E] text-[#ECE9E2] text-xs">
+              <div className="mt-4 p-3 rounded-[6px] bg-[#1C1C1E] border border-[#D4493E] text-[#ECE9E2] text-xs animate-slide-up">
                 {errorMsg}
               </div>
             )}
@@ -1965,7 +1966,7 @@ export default function MangaIDApp() {
 
       {/* VIEW 4: MANGA READER (WEBTOON CONTINUOUS SCROLL OR SINGLE PAGE SLIDE) */}
       {view === "reader" && chapterData && (
-        <div className="flex-1 flex flex-col bg-[#0D0D0E]">
+        <div className="flex-1 flex flex-col bg-[#0D0D0E] animate-fade-in">
           {/* Reader Sticky Header */}
           <header className="sticky top-0 z-50 bg-[#0D0D0E]/95 backdrop-blur-md border-b border-[#2A2A2C] py-2 sm:py-2.5">
             <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3">
@@ -1979,7 +1980,7 @@ export default function MangaIDApp() {
                     loadSavedChapters();
                     setView("home");
                   }}
-                  className="min-h-[32px] sm:min-h-[36px] text-xs text-[#8E8B84] hover:text-[#ECE9E2] flex items-center gap-1 font-mono transition-colors cursor-pointer flex-shrink-0"
+                  className="min-h-[32px] sm:min-h-[36px] text-xs text-[#8E8B84] hover:text-[#ECE9E2] flex items-center gap-1 font-mono transition-colors cursor-pointer flex-shrink-0 btn-press"
                   title="Kembali ke Beranda"
                 >
                   <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
@@ -2522,8 +2523,8 @@ export default function MangaIDApp() {
 
       {/* Help & Shortcuts Modal */}
       {showHelp && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-lg w-full p-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-lg w-full p-6 shadow-2xl relative animate-scale-in">
             <button
               onClick={() => setShowHelp(false)}
               className="absolute top-4 right-4 text-[#8E8B84] hover:text-[#ECE9E2] transition-colors p-1 rounded-[4px] cursor-pointer"
@@ -2579,7 +2580,7 @@ export default function MangaIDApp() {
 
             <button
               onClick={() => setShowHelp(false)}
-              className="mt-6 w-full py-2.5 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] font-semibold text-xs text-white transition-colors cursor-pointer"
+              className="mt-6 w-full py-2.5 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] font-semibold text-xs text-white transition-all cursor-pointer btn-press shadow-md shadow-[#E8452C]/20"
             >
               Mengerti
             </button>
@@ -2589,8 +2590,8 @@ export default function MangaIDApp() {
 
       {/* Chapter Drawer / Modal */}
       {selectedSeries && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-[#151516] border border-[#2A2A2C] rounded-t-xl sm:rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom duration-200">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-t-xl sm:rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in">
             {/* Drawer Header */}
             <div className="p-4 sm:p-5 border-b border-[#2A2A2C] flex items-center justify-between gap-3 bg-[#111112]">
               <div className="min-w-0 flex-1">
@@ -2606,7 +2607,7 @@ export default function MangaIDApp() {
                         currentTitle: selectedSeries.title,
                       })
                     }
-                    className="p-1.5 rounded-[4px] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer flex-shrink-0"
+                    className="p-1.5 rounded-[4px] hover:bg-[#1C1C1E] text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer flex-shrink-0 btn-press"
                     title="Ganti Nama Seri Manga"
                   >
                     <Pencil className="w-3.5 h-3.5" />
@@ -2624,7 +2625,7 @@ export default function MangaIDApp() {
                   setSelectedSeries(null);
                   setDrawerSearchQuery("");
                 }}
-                className="w-8 h-8 rounded-[6px] border border-[#2A2A2C] flex items-center justify-center text-[#8E8B84] hover:text-[#ECE9E2] hover:bg-[#1C1C1E] transition-colors cursor-pointer flex-shrink-0"
+                className="w-8 h-8 rounded-[6px] border border-[#2A2A2C] flex items-center justify-center text-[#8E8B84] hover:text-[#ECE9E2] hover:bg-[#1C1C1E] transition-colors cursor-pointer flex-shrink-0 btn-press"
                 title="Tutup"
               >
                 <X className="w-4 h-4" />
@@ -2770,8 +2771,8 @@ export default function MangaIDApp() {
 
       {/* Explorer Manga Chapters Drawer / Modal */}
       {explorerSelectedManga && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-[#151516] border border-[#2A2A2C] rounded-t-xl sm:rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom duration-200">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-t-xl sm:rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up sm:animate-scale-in">
             {/* Header */}
             <div className="p-4 sm:p-5 border-b border-[#2A2A2C] flex items-start justify-between gap-4 bg-[#111112]">
               <div className="flex gap-3 sm:gap-4 min-w-0 flex-1">
@@ -2976,8 +2977,8 @@ export default function MangaIDApp() {
 
       {/* Rename Modal */}
       {renameTarget && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-md w-full p-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-md w-full p-5 shadow-2xl relative animate-scale-in">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-9 h-9 rounded-[6px] bg-[#E8452C]/10 border border-[#E8452C]/30 flex items-center justify-center text-[#E8452C] flex-shrink-0">
                 <Pencil className="w-4 h-4" strokeWidth={1.8} />
@@ -3005,7 +3006,7 @@ export default function MangaIDApp() {
                     value={newChapterNumInput}
                     onChange={(e) => setNewChapterNumInput(e.target.value)}
                     placeholder="Contoh: 1"
-                    className="w-full bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] px-3 py-2 text-xs text-[#ECE9E2] placeholder-[#8E8B84] focus:outline-none focus:border-[#E8452C]"
+                    className="w-full bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] px-3 py-2 text-xs text-[#ECE9E2] placeholder-[#8E8B84] focus:outline-none focus:border-[#E8452C] transition-colors"
                   />
                 </div>
               )}
@@ -3019,7 +3020,7 @@ export default function MangaIDApp() {
                   value={newTitleInput}
                   onChange={(e) => setNewTitleInput(e.target.value)}
                   placeholder="Masukkan judul manga..."
-                  className="w-full bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] px-3 py-2 text-xs text-[#ECE9E2] placeholder-[#8E8B84] focus:outline-none focus:border-[#E8452C]"
+                  className="w-full bg-[#1C1C1E] border border-[#2A2A2C] rounded-[6px] px-3 py-2 text-xs text-[#ECE9E2] placeholder-[#8E8B84] focus:outline-none focus:border-[#E8452C] transition-colors"
                 />
                 {renameTarget.type === "chapter" && (
                   <p className="text-[11px] text-[#8E8B84] mt-1">
@@ -3033,14 +3034,14 @@ export default function MangaIDApp() {
               <button
                 onClick={() => setRenameTarget(null)}
                 disabled={isRenaming}
-                className="px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                className="px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer btn-press"
               >
                 Batal
               </button>
               <button
                 onClick={handleConfirmRename}
                 disabled={isRenaming || !newTitleInput.trim()}
-                className="px-4 py-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] disabled:bg-[#1C1C1E] disabled:text-[#8E8B84] font-semibold text-xs text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] disabled:bg-[#1C1C1E] disabled:text-[#8E8B84] font-semibold text-xs text-white transition-all cursor-pointer flex items-center gap-1.5 btn-press shadow-md shadow-[#E8452C]/20"
               >
                 {isRenaming ? (
                   <>
@@ -3061,8 +3062,8 @@ export default function MangaIDApp() {
 
       {/* Delete Confirmation Modal */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-sm w-full p-5 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-sm w-full p-5 shadow-2xl relative animate-scale-in">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 rounded-[6px] bg-[#D4493E]/10 border border-[#D4493E]/30 flex items-center justify-center text-[#D4493E] flex-shrink-0">
                 <Trash2 className="w-4 h-4" strokeWidth={1.8} />
@@ -3087,14 +3088,14 @@ export default function MangaIDApp() {
               <button
                 onClick={() => setDeleteTarget(null)}
                 disabled={isDeleting}
-                className="px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+                className="px-3.5 py-2 rounded-[6px] border border-[#2A2A2C] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer btn-press"
               >
                 Batal
               </button>
               <button
                 onClick={confirmDeleteAction}
                 disabled={isDeleting}
-                className="px-4 py-2 rounded-[6px] bg-[#D4493E] hover:bg-[#E8452C] font-semibold text-xs text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 rounded-[6px] bg-[#D4493E] hover:bg-[#E8452C] font-semibold text-xs text-white transition-all cursor-pointer flex items-center gap-1.5 btn-press shadow-md shadow-[#D4493E]/20"
               >
                 {isDeleting ? (
                   <>
