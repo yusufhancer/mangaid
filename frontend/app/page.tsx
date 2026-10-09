@@ -217,7 +217,7 @@ export default function MangaIDApp() {
   const [showAudioPlayer, setShowAudioPlayer] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
-  const [audioVoice, setAudioVoice] = useState<"ardi" | "gadis">("ardi");
+  const [audioVoice, setAudioVoice] = useState<"auto" | "ardi" | "gadis">("auto");
   const [audioSpeed, setAudioSpeed] = useState<number>(1.0);
   const [currentAudioPage, setCurrentAudioPage] = useState<number>(1);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -701,7 +701,7 @@ export default function MangaIDApp() {
     };
   }, []);
 
-  const playPageAudio = (pageNum: number, voice: "ardi" | "gadis" = audioVoice, speed: number = audioSpeed) => {
+  const playPageAudio = (pageNum: number, voice: "auto" | "ardi" | "gadis" = audioVoice, speed: number = audioSpeed) => {
     if (!chapterData) return;
     setAudioLoading(true);
     setAudioError(null);
@@ -722,7 +722,7 @@ export default function MangaIDApp() {
         try {
           (navigator as any).mediaSession.metadata = new (window as any).MediaMetadata({
             title: `${chapterData.title || "Manga"} — Bab ${chapterData.chapter_number || "1"}`,
-            artist: `MangaID AI Voice (${voice === "gadis" ? "Gadis" : "Ardi"})`,
+            artist: `MangaID AI Voice (${voice === "auto" ? "🎭 Drama Komik" : voice === "gadis" ? "Gadis" : "Ardi"})`,
             album: `Halaman ${pageNum} dari ${chapterData.pages.length}`,
             artwork: [
               { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" }
@@ -840,7 +840,7 @@ export default function MangaIDApp() {
     playPageAudio(prevP, audioVoice, audioSpeed);
   };
 
-  const handleChangeVoice = (v: "ardi" | "gadis") => {
+  const handleChangeVoice = (v: "auto" | "ardi" | "gadis") => {
     setAudioVoice(v);
     if (showAudioPlayer) {
       playPageAudio(currentAudioPage, v, audioSpeed);
@@ -2706,7 +2706,9 @@ export default function MangaIDApp() {
                       : audioError
                       ? audioError
                       : audioPlaying
-                      ? `Narasi AI Aktif (${audioVoice === "gadis" ? "Gadis" : "Ardi"})`
+                      ? audioVoice === "auto"
+                        ? "🎭 Mode Drama Auto (Multi-Karakter)"
+                        : `Narasi AI Aktif (${audioVoice === "gadis" ? "Gadis" : "Ardi"})`
                       : "Dijeda"}
                   </div>
                 </div>
@@ -2732,8 +2734,21 @@ export default function MangaIDApp() {
                   <ChevronRight className="w-4 h-4" />
                 </button>
 
-                {/* Voice Switcher (Ardi / Gadis) */}
+                {/* Voice Switcher (Auto Drama / Ardi / Gadis) */}
                 <div className="flex items-center bg-[#111112] border border-[#2A2A2C] rounded-[6px] p-0.5 text-[11px] font-mono">
+                  <button
+                    onClick={() => handleChangeVoice("auto")}
+                    className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                      audioVoice === "auto"
+                        ? "bg-[#E8452C] text-white font-semibold shadow-sm"
+                        : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                    }`}
+                    title="🎭 Mode Drama Auto-Cast: Suara pria, wanita, & narator otomatis bergantian dengan ekspresi emosi"
+                  >
+                    <span>🎭</span>
+                    <span className="hidden sm:inline">Drama</span>
+                    <span className="sm:hidden">Auto</span>
+                  </button>
                   <button
                     onClick={() => handleChangeVoice("ardi")}
                     className={`px-2 py-0.5 rounded transition-all cursor-pointer ${

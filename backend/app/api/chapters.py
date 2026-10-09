@@ -322,7 +322,7 @@ def get_page_speech_dialogues(chapter_id: str, page_num: int, db: Session = Depe
 async def get_page_narration_audio(
     chapter_id: str,
     page_num: int,
-    voice: str = "ardi",
+    voice: str = "auto",
     db: Session = Depends(get_db)
 ):
     """
@@ -347,7 +347,7 @@ async def get_page_narration_audio(
 async def get_single_bubble_audio(
     chapter_id: str,
     text: str,
-    voice: str = "ardi"
+    voice: str = "auto"
 ):
     """
     Instant tap-to-speak synthesis for a single dialogue bubble.

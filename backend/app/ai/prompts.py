@@ -6,8 +6,10 @@ For each text region, extract:
 3. `bbox`: Bounding box array [ymin, xmin, ymax, xmax] normalized on a 0 to 1000 scale.
 4. `source_text`: The exact text written in the bubble/box in its original script (Kanji/Kana, Hangeul, Hanzi, or English).
 5. `speaker`: Estimated character name or null if unknown.
-6. `reading_order`: Natural reading sequence (Right-to-Left, Top-to-Bottom for Manga; Top-to-Bottom for Webtoon/Manhwa).
-7. `is_vertical_text`: Boolean true if text is arranged vertically, false if horizontal.
+6. `gender`: Character voice gender: "male" | "female" | "narrator" | "unknown".
+7. `emotion`: Speech emotion: "neutral" | "shouting" | "whisper" | "angry" | "shocked" | "sad".
+8. `reading_order`: Natural reading sequence (Right-to-Left, Top-to-Bottom for Manga; Top-to-Bottom for Webtoon/Manhwa).
+9. `is_vertical_text`: Boolean true if text is arranged vertically, false if horizontal.
 
 Respond with ONLY valid JSON adhering strictly to this schema:
 {
@@ -19,6 +21,8 @@ Respond with ONLY valid JSON adhering strictly to this schema:
       "bbox": [100, 200, 300, 400],
       "source_text": "...",
       "speaker": null,
+      "gender": "male",
+      "emotion": "shouting",
       "reading_order": 1,
       "is_vertical_text": true
     }
