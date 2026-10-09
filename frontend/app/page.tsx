@@ -31,6 +31,7 @@ import {
   Rows,
   Home,
   Smartphone,
+  Copy,
 } from "lucide-react";
 
 const BACKEND_URL = "";
@@ -213,6 +214,74 @@ export default function MangaIDApp() {
   const [isAppInstalled, setIsAppInstalled] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
+  // Device & Workspace states
+  const [deviceId, setDeviceId] = useState<string>("");
+  const [copiedId, setCopiedId] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncIdInput, setSyncIdInput] = useState("");
+
+  // Device & Workspace management
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      let currentId = localStorage.getItem("mangaid_device_id");
+      if (!currentId) {
+        currentId = "dev-" + Math.random().toString(36).substring(2, 9) + "-" + Date.now().toString(36);
+        localStorage.setItem("mangaid_device_id", currentId);
+      }
+      setDeviceId(currentId);
+    }
+  }, []);
+
+  const apiFetch = (url: string, options: RequestInit = {}) => {
+    const currentId =
+      deviceId ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("mangaid_device_id") || "default"
+        : "default");
+    const headers = new Headers(options.headers || {});
+    if (!headers.has("X-Device-Id")) {
+      headers.set("X-Device-Id", currentId);
+    }
+    return fetch(url, { ...options, headers });
+  };
+
+  const handleCopyDeviceId = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard && deviceId) {
+      navigator.clipboard.writeText(deviceId);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    }
+  };
+
+  const handleApplySyncId = (newId: string) => {
+    const cleanId = newId.trim();
+    if (!cleanId) return;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mangaid_device_id", cleanId);
+    }
+    setDeviceId(cleanId);
+    setShowSyncModal(false);
+    setShowSettings(false);
+    setTimeout(() => {
+      loadSavedChapters();
+    }, 100);
+  };
+
+  const handleResetDeviceId = () => {
+    if (confirm("Buat ID Perangkat baru? Rak komik Anda akan mulai dari kosong (koleksi sebelumnya tetap tersimpan di ID lama).")) {
+      const newId = "dev-" + Math.random().toString(36).substring(2, 9) + "-" + Date.now().toString(36);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("mangaid_device_id", newId);
+      }
+      setDeviceId(newId);
+      setShowSyncModal(false);
+      setShowSettings(false);
+      setTimeout(() => {
+        loadSavedChapters();
+      }, 100);
+    }
+  };
+
   // Quick test URL
   const SAMPLE_URL = "https://mangadex.org/chapter/e9cfaece-daa1-4830-b239-2d09c407b56b/6";
 
@@ -225,7 +294,7 @@ export default function MangaIDApp() {
     setErrorMsg(null);
 
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/ingest`, {
+      const resp = await apiFetch(`${BACKEND_URL}/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: urlInput.trim() }),
@@ -271,7 +340,7 @@ export default function MangaIDApp() {
       }
       formData.append("title", uploadTitle.trim() || "Uploaded Chapter");
 
-      const resp = await fetch(`${BACKEND_URL}/api/ingest/upload`, {
+      const resp = await apiFetch(`${BACKEND_URL}/api/ingest/upload`, {
         method: "POST",
         body: formData,
       });
@@ -343,7 +412,7 @@ export default function MangaIDApp() {
     setErrorMsg(null);
 
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/ingest`, {
+      const resp = await apiFetch(`${BACKEND_URL}/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: `https://mangadex.org/chapter/${chapter.id}` }),
@@ -381,7 +450,7 @@ export default function MangaIDApp() {
     setErrorMsg(null);
 
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/jobs`, {
+      const resp = await apiFetch(`${BACKEND_URL}/api/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -416,7 +485,7 @@ export default function MangaIDApp() {
 
     const interval = setInterval(async () => {
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/jobs/${jobId}`);
+        const resp = await apiFetch(`${BACKEND_URL}/api/jobs/${jobId}`);
         if (!resp.ok) return;
 
         const data: JobStatus = await resp.json();
@@ -440,7 +509,7 @@ export default function MangaIDApp() {
   // Load saved chapters from backend
   const loadSavedChapters = async () => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/chapters`);
+      const resp = await apiFetch(`${BACKEND_URL}/api/chapters`);
       if (resp.ok) {
         const data = await resp.json();
         setSavedChapters(data);
@@ -513,12 +582,12 @@ export default function MangaIDApp() {
         fetchChapter(cId);
       }
     }
-  }, []);
+  }, [deviceId]);
 
   // Fetch Chapter for Reader
   const fetchChapter = async (cId: string) => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/chapters/${cId}`);
+      const resp = await apiFetch(`${BACKEND_URL}/api/chapters/${cId}`);
       if (!resp.ok) return;
       const data: ChapterData = await resp.json();
       setChapterData(data);
@@ -751,7 +820,7 @@ export default function MangaIDApp() {
     try {
       if (renameTarget.type === "series") {
         const oldTitle = renameTarget.oldTitle || renameTarget.currentTitle;
-        const resp = await fetch(`${BACKEND_URL}/api/chapters/series/rename`, {
+        const resp = await apiFetch(`${BACKEND_URL}/api/chapters/series/rename`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -778,7 +847,7 @@ export default function MangaIDApp() {
         }
       } else if (renameTarget.type === "chapter" && renameTarget.id) {
         const trimmedChNum = newChapterNumInput.trim();
-        const resp = await fetch(`${BACKEND_URL}/api/chapters/${renameTarget.id}`, {
+        const resp = await apiFetch(`${BACKEND_URL}/api/chapters/${renameTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -831,7 +900,7 @@ export default function MangaIDApp() {
     setIsDeleting(true);
     try {
       if (deleteTarget.type === "series") {
-        const resp = await fetch(`${BACKEND_URL}/api/chapters/series/delete`, {
+        const resp = await apiFetch(`${BACKEND_URL}/api/chapters/series/delete`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ series_title: deleteTarget.title }),
@@ -849,7 +918,7 @@ export default function MangaIDApp() {
           alert("Gagal menghapus seri manga.");
         }
       } else if (deleteTarget.id) {
-        const resp = await fetch(`${BACKEND_URL}/api/chapters/${deleteTarget.id}`, {
+        const resp = await apiFetch(`${BACKEND_URL}/api/chapters/${deleteTarget.id}`, {
           method: "DELETE",
         });
         if (resp.ok) {
@@ -1123,6 +1192,44 @@ export default function MangaIDApp() {
                     </button>
                   </div>
                 </div>
+
+                {/* Device & Workspace Isolation */}
+                <div className="pt-4 border-t border-[#2A2A2C] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-mono text-[#8E8B84] uppercase tracking-wider">
+                      Ruang Kerja Pribadi (Perangkat)
+                    </label>
+                    <span className="text-[10px] font-mono text-[#4FA36B] bg-[#4FA36B]/10 border border-[#4FA36B]/20 px-2 py-0.5 rounded">
+                      Database Terpisah
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#8E8B84] leading-relaxed">
+                    Setiap perangkat memiliki database bab sendiri agar koleksi tidak bercampur dengan pengguna lain.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 px-3 py-2 rounded-[6px] bg-[#111112] border border-[#2A2A2C] font-mono text-xs text-[#ECE9E2] truncate select-all">
+                      {deviceId || "Memuat ID..."}
+                    </div>
+                    <button
+                      onClick={handleCopyDeviceId}
+                      className="px-3 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#8E8B84] text-xs font-medium text-[#ECE9E2] transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+                      title="Salin ID Perangkat"
+                    >
+                      {copiedId ? <Check className="w-3.5 h-3.5 text-[#4FA36B]" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedId ? "Tersalin!" : "Salin"}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSyncIdInput(deviceId);
+                        setShowSyncModal(true);
+                      }}
+                      className="px-3 py-2 rounded-[6px] border border-[#2A2A2C] bg-[#1C1C1E] hover:border-[#8E8B84] text-xs font-medium text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer shrink-0"
+                      title="Ganti atau Sinkronkan ID"
+                    >
+                      Sinkron
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <button
@@ -1131,6 +1238,58 @@ export default function MangaIDApp() {
               >
                 Simpan & Tutup
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Device Sync Modal */}
+        {showSyncModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+            <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-md w-full p-6 shadow-2xl relative">
+              <button
+                onClick={() => setShowSyncModal(false)}
+                className="absolute top-4 right-4 text-[#8E8B84] hover:text-[#ECE9E2] transition-colors p-1 rounded-[4px] cursor-pointer"
+              >
+                <X className="w-4 h-4" strokeWidth={1.5} />
+              </button>
+              <h3 className="font-display text-base font-bold text-[#ECE9E2] mb-2">
+                Sinkronkan Database Perangkat
+              </h3>
+              <p className="text-xs text-[#8E8B84] mb-4 leading-relaxed">
+                Ingin rak komik di HP dan Laptop saling terhubung? Tempelkan <strong>ID Perangkat</strong> dari perangkat lain di bawah ini.
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-mono text-[#8E8B84] uppercase tracking-wider block mb-1.5">
+                    ID Perangkat Target
+                  </label>
+                  <input
+                    type="text"
+                    value={syncIdInput}
+                    onChange={(e) => setSyncIdInput(e.target.value)}
+                    placeholder="Contoh: dev-xxxx-xxxx"
+                    className="w-full px-3 py-2.5 rounded-[6px] bg-[#111112] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none font-mono text-xs text-[#ECE9E2]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    onClick={() => handleApplySyncId(syncIdInput)}
+                    disabled={!syncIdInput.trim()}
+                    className="flex-1 py-2.5 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] disabled:opacity-50 font-semibold text-xs text-white transition-colors cursor-pointer"
+                  >
+                    Terapkan & Muat Rak
+                  </button>
+                  <button
+                    onClick={handleResetDeviceId}
+                    className="py-2.5 px-3 rounded-[6px] border border-[#2A2A2C] hover:border-[#D4493E] hover:text-[#D4493E] text-xs font-mono text-[#8E8B84] transition-colors cursor-pointer shrink-0"
+                    title="Buat ID Perangkat Baru"
+                  >
+                    Reset Baru
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

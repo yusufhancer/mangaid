@@ -3,7 +3,7 @@ import os
 import shutil
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -39,8 +39,14 @@ class ChapterDetailResponse(BaseModel):
     pages: List[PageItemResponse]
 
 @router.get("", response_model=List[ChapterSummaryResponse])
-def list_chapters(db: Session = Depends(get_db)):
-    chapters = db.query(Chapter).order_by(Chapter.created_at.desc()).all()
+def list_chapters(request: Request, db: Session = Depends(get_db)):
+    device_id = request.headers.get("x-device-id") or "default"
+    query = db.query(Chapter)
+    if device_id == "default":
+        query = query.filter((Chapter.device_id == "default") | (Chapter.device_id.is_(None)))
+    else:
+        query = query.filter(Chapter.device_id == device_id)
+    chapters = query.order_by(Chapter.created_at.desc()).all()
     res = []
     for c in chapters:
         pages_map = {}
@@ -71,14 +77,25 @@ class SeriesDeleteRequest(BaseModel):
     series_title: str
 
 @router.patch("/series/rename")
-def rename_series(payload: SeriesRenameRequest, db: Session = Depends(get_db)):
+def rename_series(payload: SeriesRenameRequest, request: Request, db: Session = Depends(get_db)):
     new_title_clean = payload.new_title.strip()
     if not new_title_clean:
         raise HTTPException(status_code=400, detail="New title cannot be empty.")
 
-    chapters = db.query(Chapter).filter(Chapter.title == payload.old_title).all()
+    device_id = request.headers.get("x-device-id") or "default"
+    query = db.query(Chapter).filter(Chapter.title == payload.old_title)
+    if device_id == "default":
+        query = query.filter((Chapter.device_id == "default") | (Chapter.device_id.is_(None)))
+    else:
+        query = query.filter(Chapter.device_id == device_id)
+    chapters = query.all()
     if not chapters:
-        chapters = db.query(Chapter).filter(Chapter.title.ilike(payload.old_title)).all()
+        query = db.query(Chapter).filter(Chapter.title.ilike(payload.old_title))
+        if device_id == "default":
+            query = query.filter((Chapter.device_id == "default") | (Chapter.device_id.is_(None)))
+        else:
+            query = query.filter(Chapter.device_id == device_id)
+        chapters = query.all()
 
     for c in chapters:
         c.title = new_title_clean
@@ -92,10 +109,21 @@ def rename_series(payload: SeriesRenameRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/series/delete")
-def delete_series(payload: SeriesDeleteRequest, db: Session = Depends(get_db)):
-    chapters = db.query(Chapter).filter(Chapter.title == payload.series_title).all()
+def delete_series(payload: SeriesDeleteRequest, request: Request, db: Session = Depends(get_db)):
+    device_id = request.headers.get("x-device-id") or "default"
+    query = db.query(Chapter).filter(Chapter.title == payload.series_title)
+    if device_id == "default":
+        query = query.filter((Chapter.device_id == "default") | (Chapter.device_id.is_(None)))
+    else:
+        query = query.filter(Chapter.device_id == device_id)
+    chapters = query.all()
     if not chapters:
-        chapters = db.query(Chapter).filter(Chapter.title.ilike(payload.series_title)).all()
+        query = db.query(Chapter).filter(Chapter.title.ilike(payload.series_title))
+        if device_id == "default":
+            query = query.filter((Chapter.device_id == "default") | (Chapter.device_id.is_(None)))
+        else:
+            query = query.filter(Chapter.device_id == device_id)
+        chapters = query.all()
 
     if not chapters:
         raise HTTPException(status_code=404, detail="Series not found.")
@@ -225,10 +253,14 @@ def export_chapter_pdf(chapter_id: str, db: Session = Depends(get_db)):
     )
 
 @router.delete("/{chapter_id}")
-def delete_chapter(chapter_id: str, db: Session = Depends(get_db)):
+def delete_chapter(chapter_id: str, request: Request, db: Session = Depends(get_db)):
     chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found.")
+
+    device_id = request.headers.get("x-device-id") or "default"
+    if device_id != "default" and chapter.device_id and chapter.device_id != "default" and chapter.device_id != device_id:
+        raise HTTPException(status_code=403, detail="Tidak memiliki akses untuk menghapus bab ini.")
 
     # Remove files from disk
     chapter_dir = settings.data_path / "chapters" / chapter_id
@@ -241,10 +273,14 @@ def delete_chapter(chapter_id: str, db: Session = Depends(get_db)):
     return {"message": "Chapter deleted successfully."}
 
 @router.patch("/{chapter_id}")
-def update_chapter(chapter_id: str, payload: ChapterUpdateRequest, db: Session = Depends(get_db)):
+def update_chapter(chapter_id: str, payload: ChapterUpdateRequest, request: Request, db: Session = Depends(get_db)):
     chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found.")
+
+    device_id = request.headers.get("x-device-id") or "default"
+    if device_id != "default" and chapter.device_id and chapter.device_id != "default" and chapter.device_id != device_id:
+        raise HTTPException(status_code=403, detail="Tidak memiliki akses untuk mengubah bab ini.")
 
     if payload.title is not None and payload.title.strip():
         chapter.title = payload.title.strip()

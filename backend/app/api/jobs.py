@@ -2,7 +2,7 @@ import asyncio
 import json
 import uuid
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,7 @@ class JobResponse(BaseModel):
 @router.post("", response_model=JobResponse)
 async def create_job(
     payload: JobCreateRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
@@ -45,13 +46,16 @@ async def create_job(
     if not page_urls:
         raise HTTPException(status_code=400, detail="No pages available to translate.")
 
+    device_id = request.headers.get("x-device-id") or getattr(session, "device_id", "default") or "default"
+
     # Create Chapter
     chapter_id = str(uuid.uuid4())
     chapter = Chapter(
         id=chapter_id,
         title=session.title or "Untitled Manga",
         chapter_number=session.chapter_number or "1",
-        language_source=session.language_hint or "ja"
+        language_source=session.language_hint or "ja",
+        device_id=device_id
     )
     db.add(chapter)
 
@@ -64,7 +68,8 @@ async def create_job(
         total_pages=len(page_urls),
         completed_pages=0,
         current_page=0,
-        settings_json=json.dumps(payload.settings)
+        settings_json=json.dumps(payload.settings),
+        device_id=device_id
     )
     db.add(job)
     db.commit()

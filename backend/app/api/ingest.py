@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -34,7 +34,7 @@ class IngestResponse(BaseModel):
     pages: List[PageResponse]
 
 @router.post("", response_model=IngestResponse)
-async def ingest_chapter(payload: IngestRequest, db: Session = Depends(get_db)):
+async def ingest_chapter(payload: IngestRequest, request: Request, db: Session = Depends(get_db)):
     url = payload.url.strip()
     if not url:
         raise HTTPException(
@@ -56,10 +56,12 @@ async def ingest_chapter(payload: IngestRequest, db: Session = Depends(get_db)):
             detail=f"Gagal mengekstrak halaman komik: {str(e)}"
         )
 
-    return _persist_and_respond(chapter_data, url, db)
+    device_id = request.headers.get("x-device-id") or "default"
+    return _persist_and_respond(chapter_data, url, db, device_id=device_id)
 
 @router.post("/upload", response_model=IngestResponse)
 async def upload_chapter_files(
+    request: Request,
     files: List[UploadFile] = File(...),
     title: Optional[str] = Form("Uploaded Chapter"),
     db: Session = Depends(get_db)
@@ -83,9 +85,10 @@ async def upload_chapter_files(
             detail=f"Gagal memproses berkas upload: {str(e)}"
         )
 
-    return _persist_and_respond(chapter_data, "upload://manual", db)
+    device_id = request.headers.get("x-device-id") or "default"
+    return _persist_and_respond(chapter_data, "upload://manual", db, device_id=device_id)
 
-def _persist_and_respond(chapter_data, source_url: str, db: Session) -> IngestResponse:
+def _persist_and_respond(chapter_data, source_url: str, db: Session, device_id: str = "default") -> IngestResponse:
     session = IngestSession(
         url=source_url,
         title=chapter_data.title,
@@ -94,6 +97,7 @@ def _persist_and_respond(chapter_data, source_url: str, db: Session) -> IngestRe
         layer_used=chapter_data.layer_name,
         confidence=chapter_data.confidence,
         headers_json=json.dumps(chapter_data.headers_needed),
+        device_id=device_id,
     )
     db.add(session)
     db.flush()

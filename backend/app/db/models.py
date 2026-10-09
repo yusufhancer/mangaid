@@ -15,6 +15,7 @@ class IngestSession(Base):
     layer_used = Column(String(50), nullable=False)
     confidence = Column(Float, default=1.0)
     headers_json = Column(Text, nullable=True)
+    device_id = Column(String(64), index=True, nullable=True, default="default")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     pages = relationship("PageCandidate", back_populates="session", cascade="all, delete-orphan", order_by="PageCandidate.page_number")
@@ -43,6 +44,7 @@ class Job(Base):
     current_page = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
     settings_json = Column(Text, nullable=True)
+    device_id = Column(String(64), index=True, nullable=True, default="default")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -53,6 +55,7 @@ class Chapter(Base):
     title = Column(String(255), nullable=True)
     chapter_number = Column(String(50), nullable=True)
     language_source = Column(String(10), default="ja")
+    device_id = Column(String(64), index=True, nullable=True, default="default")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     pages = relationship("PageRecord", back_populates="chapter", cascade="all, delete-orphan", order_by="PageRecord.page_number")

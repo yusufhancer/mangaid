@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import declarative_base, sessionmaker
 from ..core.config import settings
@@ -31,3 +31,15 @@ def get_db():
 def init_db():
     from . import models  # noqa
     Base.metadata.create_all(bind=engine)
+
+    # Lightweight auto-migration for device_id column
+    with engine.connect() as conn:
+        for table in ["chapters", "jobs", "ingest_sessions"]:
+            try:
+                result = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+                col_names = [r[1] for r in result]
+                if col_names and "device_id" not in col_names:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN device_id VARCHAR(64) DEFAULT 'default'"))
+                    conn.commit()
+            except Exception:
+                pass
