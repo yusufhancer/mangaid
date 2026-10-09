@@ -1,5 +1,5 @@
 // MangaID Service Worker
-const CACHE_NAME = 'mangaid-cache-v1';
+const CACHE_NAME = 'mangaid-cache-v2';
 
 const STATIC_ASSETS = [
   '/',
@@ -40,6 +40,11 @@ self.addEventListener('activate', (event) => {
 // Fetch: Strategy for requests
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Bypass cache on localhost/dev so changes are always 100% fresh
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return;
+  }
 
   // 1. DO NOT cache or intercept API calls (FastAPI translation, OCR, ingest, explorer, proxy)
   if (url.pathname.startsWith('/api/')) {
