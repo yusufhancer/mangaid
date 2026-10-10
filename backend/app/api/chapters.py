@@ -341,7 +341,7 @@ async def get_page_narration_audio(
     return FileResponse(
         str(audio_path),
         media_type=media_type,
-        headers={"Cache-Control": "public, max-age=86400"}
+        headers={"Cache-Control": "no-cache, must-revalidate"}
     )
 
 @router.get("/{chapter_id}/tts/bubble")
