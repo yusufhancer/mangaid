@@ -10,11 +10,53 @@ from sqlalchemy.orm import Session
 from google import genai
 from google.genai import types
 
+import re
 from ..core.config import settings
 from ..core.logging import logger
 from ..db.models import PageRecord, Chapter
 
 DEFAULT_VOICE = "auto"
+
+CREDIT_WATERMARK_PATTERNS = [
+    r"@\w+",
+    r"\b(tl|tl-an|translate|translator|terjemahan|diterjemahkan|penerjemah)\s*(oleh|by|:|\-|\b)",
+    r"\b(cleaner|cl|typesetter|ts|proofreader|pr|redrawer|rd|typeset)\s*(oleh|by|:|\-)",
+    r"\b(raw\s*(provider|source|by|:)|encoded\s*by)\b",
+    r"\b(scans?|scanlation|scanlator)\b",
+    r"\b(komikcast|westmanga|mangaku|bacakomik|shinigami|kiryuu|maid\.my|komikindo|komiku|mangatale|manhwaindo|sektekomik|mangakita|komikgo)\b",
+    r"\b(join\s+discord|link\s+discord|discord\.gg|discord\.com|t\.me\/)\b",
+    r"\b(traktir|trakteer|karyakarsa|saweria|donasi|support\s+us)\b",
+    r"\b(baca\s+hanya\s+di|baca\s+di\s+web|hanya\s+di|dilarang\s+(memperjualbelikan|reupload|re\-upload|mirror))\b",
+    r"\b(project|proyek)\s*:\s*\w+",
+    r"\b(visit|kunjungi)\s*:\s*\w+",
+    r"https?://\S+",
+    r"www\.\S+",
+]
+
+def is_credit_or_watermark(text: str) -> bool:
+    """Detects scanlator watermarks, credits, and translator social handles."""
+    if not text:
+        return True
+    lowered = text.lower().strip()
+    if "@" in lowered:
+        return True
+    for pat in CREDIT_WATERMARK_PATTERNS:
+        if re.search(pat, lowered, re.IGNORECASE):
+            return True
+    return False
+
+FEMALE_CLUES = [
+    "girl", "woman", "female", "she", "miko", "mie", "miruko", "nami", "robin", 
+    "sakura", "hinata", "chan", "san", "mba", "mbak", "ibu", "mama", "cewek", 
+    "gadis", "wanita", "putri", "hime", "lady", "sister", "sis", "perempuan",
+    "hana", "yotsuba", "chika", "kaguya", "marin", "frieren", "fern"
+]
+
+MALE_CLUES = [
+    "boy", "man", "male", "guy", "he", "kun", "luffy", "zoro", "sanji", 
+    "naruto", "sasuke", "deku", "bro", "bocah", "cowok", "pria", "abang", 
+    "kakek", "paman", "ayah", "papa", "bapak", "laki", "sir", "lord", "tuan", "om"
+]
 
 def classify_character_acting(
     dialogue: Dict[str, Any],
@@ -23,11 +65,13 @@ def classify_character_acting(
     """
     Classifies character role, Gemini voice, and rich acting emotion prompt.
     Includes seamless Edge-TTS fallback parameters.
+    Respects page and chapter gender context so all-female manga retains an all-female voice cast.
     """
     text = dialogue.get("text", "").strip()
     r_type = dialogue.get("type", "dialogue")
     gender = (dialogue.get("gender") or "").lower().strip()
     speaker = (dialogue.get("speaker") or "").lower().strip()
+    gender_bias = dialogue.get("gender_bias", "neutral")
     lowered = text.lower()
 
     # 1. Monster / Ghost / Creature (Chilling Horror Acting)
@@ -43,30 +87,7 @@ def classify_character_acting(
             "acting_desc": "Suara berat, dingin, berbisik misterius dan menakutkan, membuat bulu kuduk merinding.",
         }
 
-    # 2. Narration
-    if r_type == "narration" or "narator" in speaker or "narrator" in speaker:
-        return {
-            "gemini_voice": "Fenrir",
-            "edge_voice": "id-ID-ArdiNeural",
-            "edge_rate": "-4%",
-            "edge_pitch": "-12Hz",
-            "edge_vol": "+10%",
-            "role_desc": "Narator komik profesional",
-            "acting_desc": "Intonasi narasi cerita yang berwibawa, jernih, dan memikat pembaca.",
-        }
-
-    # 3. Gender determination
-    female_clues = [
-        "girl", "woman", "female", "she", "miko", "mie", "miruko", "nami", "robin", 
-        "sakura", "hinata", "chan", "san", "mba", "mbak", "ibu", "mama", "cewek", 
-        "gadis", "wanita", "putri", "hime", "lady", "sister", "sis", "perempuan"
-    ]
-    male_clues = [
-        "boy", "man", "male", "guy", "he", "kun", "luffy", "zoro", "sanji", 
-        "naruto", "sasuke", "deku", "bro", "bocah", "cowok", "pria", "abang", 
-        "kakek", "paman", "ayah", "papa", "bapak", "laki", "sir", "lord", "tuan"
-    ]
-
+    # 2. Gender determination
     is_female = False
     if default_voice_mode == "gadis":
         is_female = True
@@ -76,15 +97,44 @@ def classify_character_acting(
         is_female = True
     elif gender in ("male", "m", "pria", "cowok", "laki-laki"):
         is_female = False
-    elif any(k in speaker for k in female_clues):
+    elif any(k in speaker for k in FEMALE_CLUES):
         is_female = True
-    elif any(k in speaker for k in male_clues):
+    elif any(k in speaker for k in MALE_CLUES):
+        is_female = False
+    elif gender_bias == "female":
+        is_female = True
+    elif gender_bias == "male":
         is_female = False
     else:
         if any(w in lowered for w in ["rokku", "rok ", "mas ", "kakak ", "oppa", "senpai"]):
             is_female = True
         else:
             is_female = False
+
+    # 3. Narration handling
+    # In manga, rectangular narration boxes are overwhelmingly the protagonist's inner voice.
+    # If the page/chapter has a female protagonist or is all-female, narrator uses a female voice.
+    if r_type == "narration" or "narator" in speaker or "narrator" in speaker:
+        if is_female:
+            return {
+                "gemini_voice": "Aoede",
+                "edge_voice": "id-ID-GadisNeural",
+                "edge_rate": "-2%",
+                "edge_pitch": "+2Hz",
+                "edge_vol": "+5%",
+                "role_desc": "Narator wanita anime",
+                "acting_desc": "Intonasi narasi batin cerita anime yang lembut, jernih, dan menyentuh.",
+            }
+        else:
+            return {
+                "gemini_voice": "Fenrir",
+                "edge_voice": "id-ID-ArdiNeural",
+                "edge_rate": "-4%",
+                "edge_pitch": "-12Hz",
+                "edge_vol": "+10%",
+                "role_desc": "Narator komik profesional",
+                "acting_desc": "Intonasi narasi cerita yang berwibawa, jernih, dan memikat pembaca.",
+            }
 
     # 4. Punctuation & Emotion Nuances
     is_shouting = (
@@ -146,6 +196,8 @@ def classify_character_acting(
 def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[Dict[str, Any]]:
     """
     Extracts ordered dialogues and speech bubbles from a page's analysis regions.
+    Filters out scanlator watermarks, credits, and non-dialogue metadata.
+    Detects page and chapter gender context so all-female cast manga sounds natural.
     Sorted in manga reading order (top to bottom, right to left).
     """
     record = db.query(PageRecord).filter(
@@ -162,22 +214,82 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
         return []
 
     dialogues = []
+    female_signals = 0
+    male_signals = 0
+
     for r in regions:
         r_type = r.get("type", "dialogue")
-        if r_type in ("dialogue", "narration", "thought", "sign", "other"):
-            text = (r.get("translated_text") or r.get("source_text") or "").strip()
-            # Skip if text is purely symbols or empty
-            if text and any(c.isalnum() for c in text):
-                box = r.get("bbox") or r.get("pixel_bbox") or r.get("box_2d") or [0, 0, 0, 0]
-                dialogues.append({
-                    "id": r.get("id"),
-                    "speaker": r.get("speaker") or ("Narator" if r_type == "narration" else None),
-                    "gender": r.get("gender") or ("narrator" if r_type == "narration" else None),
-                    "emotion": r.get("emotion"),
-                    "type": r_type,
-                    "text": text,
-                    "box_2d": box
-                })
+        # STRICT: Only dialogue, narration, thought. Drop 'other', 'sfx', 'sign' (credits/signs/sound effects)
+        if r_type not in ("dialogue", "narration", "thought"):
+            continue
+
+        text = (r.get("translated_text") or r.get("source_text") or "").strip()
+        # Skip if text is purely symbols or empty
+        if not text or not any(c.isalnum() for c in text):
+            continue
+
+        # Filter out scanlator watermark / translator credits
+        if is_credit_or_watermark(text):
+            continue
+
+        speaker = (r.get("speaker") or "").strip()
+        gender = (r.get("gender") or "").strip().lower()
+        spk_lower = speaker.lower()
+
+        if gender in ("female", "f", "wanita", "cewek", "gadis", "perempuan") or any(k in spk_lower for k in FEMALE_CLUES):
+            female_signals += 1
+        elif gender in ("male", "m", "pria", "cowok", "laki-laki") or any(k in spk_lower for k in MALE_CLUES):
+            male_signals += 1
+
+        box = r.get("bbox") or r.get("pixel_bbox") or r.get("box_2d") or [0, 0, 0, 0]
+        dialogues.append({
+            "id": r.get("id"),
+            "speaker": speaker if speaker else ("Narator" if r_type == "narration" else None),
+            "gender": gender if gender else ("narrator" if r_type == "narration" else None),
+            "emotion": r.get("emotion"),
+            "type": r_type,
+            "text": text,
+            "box_2d": box
+        })
+
+    # Determine gender bias: if page has exclusively female characters, bias to female!
+    if female_signals > 0 and male_signals == 0:
+        page_bias = "female"
+    elif male_signals > 0 and female_signals == 0:
+        page_bias = "male"
+    elif female_signals > 0 and male_signals > 0:
+        page_bias = "female" if female_signals >= male_signals else "male"
+    else:
+        # No characters detected on this page alone; check chapter-wide cast
+        page_bias = "neutral"
+        if chapter_id and db:
+            try:
+                other_pages = db.query(PageRecord).filter(
+                    PageRecord.chapter_id == chapter_id,
+                    PageRecord.page_number != page_number
+                ).all()
+                ch_fem = 0
+                ch_male = 0
+                for op in other_pages:
+                    if not op.regions_json:
+                        continue
+                    op_regs = json.loads(op.regions_json)
+                    for opr in op_regs:
+                        g = (opr.get("gender") or "").lower()
+                        s = (opr.get("speaker") or "").lower()
+                        if g in ("female", "f", "wanita", "cewek", "gadis", "perempuan") or any(k in s for k in FEMALE_CLUES):
+                            ch_fem += 1
+                        elif g in ("male", "m", "pria", "cowok", "laki-laki") or any(k in s for k in MALE_CLUES):
+                            ch_male += 1
+                if ch_fem > 0 and ch_male == 0:
+                    page_bias = "female"
+                elif ch_male > 0 and ch_fem == 0:
+                    page_bias = "male"
+            except Exception:
+                pass
+
+    for d in dialogues:
+        d["gender_bias"] = page_bias
 
     def manga_sort_key(d):
         b = d["box_2d"]
@@ -384,6 +496,9 @@ async def synthesize_single_bubble(text: str, voice_key: str = "auto") -> Option
     """
     clean_text = text.strip()
     if not clean_text or not any(c.isalnum() for c in clean_text):
+        return None
+
+    if is_credit_or_watermark(clean_text):
         return None
 
     dummy_d = {"text": clean_text, "type": "dialogue"}
