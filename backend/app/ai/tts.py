@@ -302,10 +302,14 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
     dialogues.sort(key=manga_sort_key)
     return dialogues
 
+import time
+
 TTS_MODELS = [
-    "gemini-3.1-flash-tts-preview",
     "gemini-2.5-flash-preview-tts",
+    "gemini-3.1-flash-tts-preview",
+    "gemini-3.8-flash-tts",
     "gemini-3.8-flash-lite-tts",
+    "gemini-2.5-pro-preview-tts",
 ]
 
 def get_gemini_api_keys() -> List[str]:
@@ -315,7 +319,7 @@ def get_gemini_api_keys() -> List[str]:
 
 def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
     """Synchronous Google GenAI Gemini TTS call speaking ONLY the pure dialogue.
-    Automatically rotates through all configured GEMINI_API_KEYs on quota exhaustion."""
+    Automatically rotates through all configured GEMINI_API_KEYs and all TTS_MODELS."""
     keys = get_gemini_api_keys()
     if not keys:
         return None
@@ -352,10 +356,34 @@ def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
                             return part.inline_data.data
             except Exception as e:
                 err_msg = str(e)
-                if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
-                    logger.warning("Gemini TTS quota reached on model %s for key ...%s", model_name, api_key[-4:] if len(api_key) > 4 else "")
-                    break  # Break out to try next API key in the list
-                logger.warning("Gemini TTS model %s failed (%s): %s", model_name, voice_name, e)
+                if "PerMinute" in err_msg or "retry in" in err_msg:
+                    # Temporary burst limit: wait 3.5s and retry once
+                    logger.info("RPM burst limit on model %s, pausing 3.5s...", model_name)
+                    time.sleep(3.5)
+                    try:
+                        resp = client.models.generate_content(
+                            model=model_name,
+                            contents=clean_text,
+                            config=types.GenerateContentConfig(
+                                response_modalities=["AUDIO"],
+                                speech_config=types.SpeechConfig(
+                                    voice_config=types.VoiceConfig(
+                                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                            voice_name=voice_name
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                        if resp.candidates and resp.candidates[0].content.parts:
+                            for part in resp.candidates[0].content.parts:
+                                if part.inline_data and part.inline_data.data:
+                                    return part.inline_data.data
+                    except Exception as retry_err:
+                        logger.warning("Retry on model %s failed: %s", model_name, retry_err)
+
+                logger.warning("Gemini TTS model %s failed for key ...%s (%s): %s", model_name, api_key[-4:] if len(api_key) > 4 else "", voice_name, e)
+                # Try NEXT model in TTS_MODELS!
                 continue
 
     return None
