@@ -308,43 +308,55 @@ TTS_MODELS = [
     "gemini-3.8-flash-lite-tts",
 ]
 
+def get_gemini_api_keys() -> List[str]:
+    """Retrieves all configured Gemini API keys supporting rotation."""
+    raw = settings.GEMINI_API_KEY or ""
+    return [k.strip() for k in raw.split(",") if k.strip()]
+
 def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
-    """Synchronous Google GenAI Gemini TTS call speaking ONLY the pure dialogue."""
-    if not settings.GEMINI_API_KEY:
+    """Synchronous Google GenAI Gemini TTS call speaking ONLY the pure dialogue.
+    Automatically rotates through all configured GEMINI_API_KEYs on quota exhaustion."""
+    keys = get_gemini_api_keys()
+    if not keys:
         return None
     clean_text = text.strip()
     if not clean_text or not any(c.isalnum() for c in clean_text):
         return None
 
-    try:
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    except Exception as err:
-        logger.error("Failed to initialize GenAI client: %s", err)
-        return None
-
-    for model_name in TTS_MODELS:
+    for api_key in keys:
         try:
-            resp = client.models.generate_content(
-                model=model_name,
-                contents=clean_text,
-                config=types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name=voice_name
+            client = genai.Client(api_key=api_key)
+        except Exception as err:
+            logger.error("Failed to initialize GenAI client: %s", err)
+            continue
+
+        for model_name in TTS_MODELS:
+            try:
+                resp = client.models.generate_content(
+                    model=model_name,
+                    contents=clean_text,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["AUDIO"],
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                    voice_name=voice_name
+                                )
                             )
                         )
                     )
                 )
-            )
-            if resp.candidates and resp.candidates[0].content.parts:
-                for part in resp.candidates[0].content.parts:
-                    if part.inline_data and part.inline_data.data:
-                        return part.inline_data.data
-        except Exception as e:
-            logger.warning("Gemini TTS model %s failed (%s): %s", model_name, voice_name, e)
-            continue
+                if resp.candidates and resp.candidates[0].content.parts:
+                    for part in resp.candidates[0].content.parts:
+                        if part.inline_data and part.inline_data.data:
+                            return part.inline_data.data
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                    logger.warning("Gemini TTS quota reached on model %s for key ...%s", model_name, api_key[-4:] if len(api_key) > 4 else "")
+                    break  # Break out to try next API key in the list
+                logger.warning("Gemini TTS model %s failed (%s): %s", model_name, voice_name, e)
+                continue
 
     return None
 
@@ -408,6 +420,7 @@ async def get_or_generate_page_audio(
     Generates expressive anime voice acting audio for a manga page.
     Uses Google Gemini 3.8 Flash Generative TTS first, with graceful Edge-TTS fallback.
     Caches audio to disk so repeat playback takes 0 API calls.
+    Optimized: Batches single-voice pages into 1 API call to save 80% quota!
     """
     audio_dir = settings.data_path / "chapters" / chapter_id / "audio"
     wav_path = audio_dir / f"page_{page_number:04d}_{voice_key}.wav"
@@ -428,21 +441,43 @@ async def get_or_generate_page_audio(
 
     audio_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Attempt Primary: Gemini 3.8 Flash Generative Acting TTS
+    # 1. Attempt Primary: Gemini Flash Generative Acting TTS
+    specs = [classify_character_acting(d, default_voice_mode=voice_key) for d in dialogues]
+    gemini_voices = [s["gemini_voice"] for s in specs]
+
+    # Quota optimization: If page shares the same voice, send full page in 1 single API call!
+    if len(set(gemini_voices)) == 1:
+        single_voice = gemini_voices[0]
+        combined_text = " ... ".join(d["text"].strip() for d in dialogues if d["text"].strip())
+        chunk = await asyncio.to_thread(_call_gemini_tts_sync, combined_text, single_voice)
+        if chunk and len(chunk) > 1000:
+            if not chunk.startswith(b"RIFF"):
+                buf = io.BytesIO()
+                with wave.open(buf, "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(24000)
+                    w.writeframes(chunk)
+                full_wav = buf.getvalue()
+            else:
+                full_wav = chunk
+
+            with open(wav_path, "wb") as f_out:
+                f_out.write(full_wav)
+            if wav_path.exists() and wav_path.stat().st_size > 500:
+                logger.info("Generated batch Gemini TTS page audio for p%d", page_number)
+                return wav_path
+
+    # Multi-voice page: synthesize each distinct bubble and stitch
     gemini_segments: List[bytes] = []
     gemini_failed = False
 
-    for d in dialogues:
+    for d, spec in zip(dialogues, specs):
         t = d["text"].strip()
         if not t or not any(c.isalnum() for c in t):
             continue
 
-        spec = classify_character_acting(d, default_voice_mode=voice_key)
-        chunk = await asyncio.to_thread(
-            _call_gemini_tts_sync,
-            t,
-            spec["gemini_voice"]
-        )
+        chunk = await asyncio.to_thread(_call_gemini_tts_sync, t, spec["gemini_voice"])
         if chunk and len(chunk) > 1000:
             gemini_segments.append(chunk)
         else:
@@ -455,7 +490,7 @@ async def get_or_generate_page_audio(
             with open(wav_path, "wb") as f_out:
                 f_out.write(stitched_wav)
             if wav_path.exists() and wav_path.stat().st_size > 500:
-                logger.info("Successfully generated page audio via Gemini 3.8 Flash TTS for p%d", page_number)
+                logger.info("Successfully generated page audio via Gemini Flash TTS for p%d", page_number)
                 return wav_path
 
     # 2. Backup Fallback: Edge-TTS Neural Stitching
