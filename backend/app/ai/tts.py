@@ -190,42 +190,51 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
     dialogues.sort(key=manga_sort_key)
     return dialogues
 
-def _call_gemini_tts_sync(text: str, voice_name: str, role_desc: str, acting_desc: str) -> Optional[bytes]:
-    """Synchronous Google GenAI Gemini 3.8 Flash TTS call with rich expressive acting instructions."""
+TTS_MODELS = [
+    "gemini-3.8-flash-lite-tts",
+    "gemini-2.5-flash-preview-tts",
+    "gemini-3.1-flash-tts-preview",
+]
+
+def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
+    """Synchronous Google GenAI Gemini TTS call speaking ONLY the pure dialogue."""
     if not settings.GEMINI_API_KEY:
         return None
+    clean_text = text.strip()
+    if not clean_text or not any(c.isalnum() for c in clean_text):
+        return None
+
     try:
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        acting_prompt = (
-            f"Bacakan dialog komik berikut ini dalam bahasa Indonesia dengan gaya akting anime yang sangat ekspresif, "
-            f"hidup, dan berjiwa manusia.\n"
-            f"Peran: {role_desc}\n"
-            f"Gaya & Emosi: {acting_desc}\n"
-            f"Kalimat dialog: \"{text}\"\n\n"
-            f"PENTING: Hanya ucapkan isi kalimatnya saja dengan akting yang diminta, jangan menambah kata pengantar atau penjelasan."
-        )
-        resp = client.models.generate_content(
-            model="gemini-3.8-flash-tts",
-            contents=acting_prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name=voice_name
+    except Exception as err:
+        logger.error("Failed to initialize GenAI client: %s", err)
+        return None
+
+    for model_name in TTS_MODELS:
+        try:
+            resp = client.models.generate_content(
+                model=model_name,
+                contents=clean_text,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name=voice_name
+                            )
                         )
                     )
                 )
             )
-        )
-        if resp.candidates and resp.candidates[0].content.parts:
-            for part in resp.candidates[0].content.parts:
-                if part.inline_data and part.inline_data.data:
-                    return part.inline_data.data
-        return None
-    except Exception as e:
-        logger.warning("Gemini 3.8 Flash TTS error (%s): %s", voice_name, e)
-        return None
+            if resp.candidates and resp.candidates[0].content.parts:
+                for part in resp.candidates[0].content.parts:
+                    if part.inline_data and part.inline_data.data:
+                        return part.inline_data.data
+        except Exception as e:
+            logger.warning("Gemini TTS model %s failed (%s): %s", model_name, voice_name, e)
+            continue
+
+    return None
 
 async def _call_edge_tts(text: str, voice_name: str, rate: str, pitch: str, volume: str) -> Optional[bytes]:
     """Fallback Edge-TTS neural synthesizer."""
@@ -319,9 +328,7 @@ async def get_or_generate_page_audio(
         chunk = await asyncio.to_thread(
             _call_gemini_tts_sync,
             t,
-            spec["gemini_voice"],
-            spec["role_desc"],
-            spec["acting_desc"]
+            spec["gemini_voice"]
         )
         if chunk and len(chunk) > 1000:
             gemini_segments.append(chunk)
@@ -386,9 +393,7 @@ async def synthesize_single_bubble(text: str, voice_key: str = "auto") -> Option
         gemini_chunk = await asyncio.to_thread(
             _call_gemini_tts_sync,
             clean_text,
-            spec["gemini_voice"],
-            spec["role_desc"],
-            spec["acting_desc"]
+            spec["gemini_voice"]
         )
         if gemini_chunk and len(gemini_chunk) > 1000:
             return gemini_chunk
