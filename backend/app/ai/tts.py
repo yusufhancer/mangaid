@@ -168,7 +168,7 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
             text = (r.get("translated_text") or r.get("source_text") or "").strip()
             # Skip if text is purely symbols or empty
             if text and any(c.isalnum() for c in text):
-                box = r.get("box_2d", [0, 0, 0, 0])
+                box = r.get("bbox") or r.get("pixel_bbox") or r.get("box_2d") or [0, 0, 0, 0]
                 dialogues.append({
                     "id": r.get("id"),
                     "speaker": r.get("speaker") or ("Narator" if r_type == "narration" else None),
@@ -191,9 +191,9 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
     return dialogues
 
 TTS_MODELS = [
-    "gemini-3.8-flash-lite-tts",
-    "gemini-2.5-flash-preview-tts",
     "gemini-3.1-flash-tts-preview",
+    "gemini-2.5-flash-preview-tts",
+    "gemini-3.8-flash-lite-tts",
 ]
 
 def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
@@ -249,41 +249,42 @@ async def _call_edge_tts(text: str, voice_name: str, rate: str, pitch: str, volu
         logger.error("Edge-TTS error (%s): %s", voice_name, e)
         return None
 
-def stitch_wav_buffers(wav_bytes_list: List[bytes]) -> Optional[bytes]:
+def stitch_wav_buffers(wav_bytes_list: List[bytes], sample_rate: int = 24000) -> Optional[bytes]:
     """
-    Seamlessly merges multiple WAV audio segments into a single WAV audio track
+    Seamlessly merges multiple WAV or L16 PCM audio segments into a single WAV audio track
     with a natural 250ms conversational silence between character bubbles.
+    Robust against both standard RIFF WAV containers and raw L16 PCM audio bytes.
     """
     if not wav_bytes_list:
         return None
-    if len(wav_bytes_list) == 1:
-        return wav_bytes_list[0]
 
-    try:
-        first_buf = io.BytesIO(wav_bytes_list[0])
-        with wave.open(first_buf, "rb") as w0:
-            params = w0.getparams()
-            framerate = w0.getframerate()
-            nchannels = w0.getnchannels()
-            sampwidth = w0.getsampwidth()
+    all_frames = bytearray()
+    silence = b"\x00" * int(sample_rate * 0.25 * 2)  # 250ms 16-bit mono silence
 
-        # 250ms natural pause between bubbles
-        pause_frames = int(framerate * 0.25)
-        silence = b"\x00" * (pause_frames * nchannels * sampwidth)
+    for i, seg in enumerate(wav_bytes_list):
+        if not seg:
+            continue
+        if i > 0:
+            all_frames.extend(silence)
 
-        out_buf = io.BytesIO()
-        with wave.open(out_buf, "wb") as out_w:
-            out_w.setparams(params)
-            for i, wb in enumerate(wav_bytes_list):
-                if i > 0:
-                    out_w.writeframes(silence)
-                with wave.open(io.BytesIO(wb), "rb") as cur_w:
-                    out_w.writeframes(cur_w.readframes(cur_w.getnframes()))
+        if seg.startswith(b"RIFF"):
+            try:
+                with wave.open(io.BytesIO(seg), "rb") as w:
+                    all_frames.extend(w.readframes(w.getnframes()))
+            except Exception:
+                all_frames.extend(seg[44:] if len(seg) > 44 else seg)
+        else:
+            # It's raw L16 PCM samples directly from Gemini TTS!
+            all_frames.extend(seg)
 
-        return out_buf.getvalue()
-    except Exception as e:
-        logger.error("Error stitching WAV buffers: %s", e)
-        return wav_bytes_list[0]
+    out_buf = io.BytesIO()
+    with wave.open(out_buf, "wb") as out_w:
+        out_w.setnchannels(1)
+        out_w.setsampwidth(2)
+        out_w.setframerate(sample_rate)
+        out_w.writeframes(bytes(all_frames))
+
+    return out_buf.getvalue()
 
 async def get_or_generate_page_audio(
     chapter_id: str,
@@ -395,7 +396,15 @@ async def synthesize_single_bubble(text: str, voice_key: str = "auto") -> Option
             clean_text,
             spec["gemini_voice"]
         )
-        if gemini_chunk and len(gemini_chunk) > 1000:
+        if gemini_chunk and len(gemini_chunk) > 500:
+            if not gemini_chunk.startswith(b"RIFF"):
+                buf = io.BytesIO()
+                with wave.open(buf, "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(24000)
+                    w.writeframes(gemini_chunk)
+                return buf.getvalue()
             return gemini_chunk
 
     # 2. Fallback Edge-TTS
