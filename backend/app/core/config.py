@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     @property
+    def gemini_api_keys(self) -> list[str]:
+        raw = self.GEMINI_API_KEY or ""
+        return [k.strip() for k in raw.split(",") if k.strip()]
+
+    @property
+    def primary_gemini_api_key(self) -> str:
+        keys = self.gemini_api_keys
+        return keys[0] if keys else ""
+
+    @property
     def data_path(self) -> Path:
         p = BASE_DIR / self.DATA_DIR
         p.mkdir(parents=True, exist_ok=True)

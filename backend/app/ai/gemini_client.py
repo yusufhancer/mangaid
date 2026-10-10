@@ -36,13 +36,10 @@ SAFETY_SETTINGS_BLOCK_NONE = [
 # Prioritized pool of Flash models that have active free quota
 MODEL_POOL = [
     "gemini-3.1-flash-lite-preview",
-    "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
     "gemini-flash-lite-latest",
-    "gemini-3.1-flash-lite",
-    "gemma-4-26b-a4b-it",
     "gemini-3.7-flash",
     "gemini-3.8-flash",
-    "gemini-3.5-flash",
 ]
 
 # Runtime set of models whose daily quota is exhausted
@@ -55,10 +52,11 @@ async def call_gemini_with_retry(
     timeout: float = 30.0
 ) -> Dict[str, Any]:
     """
-    Calls Gemini API with instant failover on quota exhaustion.
+    Calls Gemini API with instant failover on quota exhaustion and key rotation.
     Differentiates between RPM rate spikes and true daily exhaustion.
     """
-    if not settings.GEMINI_API_KEY:
+    keys = settings.gemini_api_keys
+    if not keys:
         raise ValueError("GEMINI_API_KEY is not configured.")
 
     if "safetySettings" not in payload:
@@ -72,43 +70,49 @@ async def call_gemini_with_retry(
 
     last_error = None
 
-    for current_model in candidates:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={settings.GEMINI_API_KEY}"
+    for api_key in keys:
+        for current_model in candidates:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={api_key}"
 
-        for attempt in range(max_retries):
-            await rate_limiter.acquire()
-            try:
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    resp = await client.post(url, json=payload)
+            for attempt in range(max_retries):
+                await rate_limiter.acquire()
+                try:
+                    async with httpx.AsyncClient(timeout=timeout) as client:
+                        resp = await client.post(url, json=payload)
 
-                    if resp.status_code == 429:
-                        body_text = resp.text
-                        # Check if this is a genuine daily quota limit (RPD)
-                        is_daily_limit = (
-                            "per day" in body_text.lower()
-                            or "perday" in body_text.lower()
-                            or "free_tier_requests_per_day" in body_text.lower()
-                        )
-                        if is_daily_limit:
-                            logger.warning("Daily quota exhausted for %s. Blacklisting model for this session...", current_model)
-                            EXHAUSTED_MODELS.add(current_model)
-                            break
-                        else:
-                            # It's a temporary RPM per-minute limit: switch immediately to another model without blacklisting
-                            logger.info("Temporary RPM limit on %s. Switching to next model...", current_model)
+                        if resp.status_code in (401, 403):
+                            logger.warning("API key ...%s returned %d for %s. Trying next key...", api_key[-4:] if len(api_key) > 4 else "", resp.status_code, current_model)
                             break
 
-                    if resp.status_code in (404, 503):
-                        logger.warning("Model %s returned %d. Trying next model immediately...", current_model, resp.status_code)
-                        break
+                        if resp.status_code == 429:
+                            body_text = resp.text
+                            # Check if this is a genuine daily quota limit (RPD)
+                            is_daily_limit = (
+                                "per day" in body_text.lower()
+                                or "perday" in body_text.lower()
+                                or "free_tier_requests_per_day" in body_text.lower()
+                            )
+                            if is_daily_limit:
+                                logger.warning("Daily quota exhausted for %s on key ...%s.", current_model, api_key[-4:] if len(api_key) > 4 else "")
+                                EXHAUSTED_MODELS.add(current_model)
+                                break
+                            else:
+                                # Temporary RPM limit: wait 3s and switch model
+                                logger.info("Temporary RPM limit on %s. Switching model...", current_model)
+                                await asyncio.sleep(3.0)
+                                break
 
-                    resp.raise_for_status()
-                    data = resp.json()
-                    return data
+                        if resp.status_code in (404, 503):
+                            logger.warning("Model %s returned %d. Trying next model immediately...", current_model, resp.status_code)
+                            break
 
-            except Exception as e:
-                last_error = e
-                logger.warning("Attempt %d on %s failed: %s", attempt + 1, current_model, e)
-                await asyncio.sleep(1.0)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        return data
+
+                except Exception as e:
+                    last_error = e
+                    logger.warning("Attempt %d on %s failed: %s", attempt + 1, current_model, e)
+                    await asyncio.sleep(1.0)
 
     raise RuntimeError(f"All Gemini models exhausted or failed: {last_error}")

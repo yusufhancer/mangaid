@@ -2,6 +2,7 @@ import json
 from typing import List, Dict, Any, Tuple
 from .gemini_client import call_gemini_with_retry
 from .prompts import CHAPTER_TRANSLATION_PROMPT_GAUL, CHAPTER_TRANSLATION_PROMPT_NEUTRAL
+from .watermark import is_credit_or_watermark
 from ..core.config import settings
 from ..core.logging import logger
 
@@ -26,7 +27,7 @@ class ChapterTranslator:
                 r_type = r.get("type", "dialogue")
                 if r_type in ("dialogue", "narration", "thought", "sign", "other"):
                     text = r.get("source_text", "").strip()
-                    if text:
+                    if text and not is_credit_or_watermark(text):
                         all_items.append({
                             "page_number": p_num,
                             "region_id": r.get("id"),

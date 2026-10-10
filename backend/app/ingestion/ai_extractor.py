@@ -29,7 +29,7 @@ class GeminiAssistedExtractor(SourceAdapter):
     """
 
     def can_handle(self, url: str) -> bool:
-        return bool(settings.GEMINI_API_KEY) and (url.startswith("http://") or url.startswith("https://"))
+        return bool(settings.primary_gemini_api_key) and (url.startswith("http://") or url.startswith("https://"))
 
     async def fetch_chapter(self, url: str) -> ChapterData:
         assert_url_safe(url)
@@ -63,29 +63,40 @@ class GeminiAssistedExtractor(SourceAdapter):
         # Limit candidate count to avoid huge context
         candidates_to_send = candidates[:60]
 
-        # Call Gemini REST API
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL_TEXT}:generateContent?key={settings.GEMINI_API_KEY}"
-
-        payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "text": f"{SYSTEM_PROMPT}\n\nPage URL: {final_url}\nPage Title: {soup.title.string if soup.title else ''}\nCandidates:\n{json.dumps(candidates_to_send, indent=2)}"
-                        }
-                    ]
+        # Call Gemini REST API with key rotation
+        ai_data = None
+        last_err = None
+        for key in settings.gemini_api_keys:
+            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL_TEXT}:generateContent?key={key}"
+            payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": f"{SYSTEM_PROMPT}\n\nPage URL: {final_url}\nPage Title: {soup.title.string if soup.title else ''}\nCandidates:\n{json.dumps(candidates_to_send, indent=2)}"
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
                 }
-            ],
-            "generationConfig": {
-                "responseMimeType": "application/json"
             }
-        }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            ai_resp = await client.post(gemini_url, json=payload)
-            ai_resp.raise_for_status()
-            ai_data = ai_resp.json()
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    ai_resp = await client.post(gemini_url, json=payload)
+                    if ai_resp.status_code == 200:
+                        ai_data = ai_resp.json()
+                        break
+                    last_err = f"HTTP {ai_resp.status_code}: {ai_resp.text}"
+            except Exception as e:
+                last_err = str(e)
+                continue
+
+        if not ai_data:
+            raise RuntimeError(f"Gemini extractor failed on all keys: {last_err}")
 
         try:
             raw_text = ai_data["candidates"][0]["content"]["parts"][0]["text"]

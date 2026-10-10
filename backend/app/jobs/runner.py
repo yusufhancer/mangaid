@@ -109,6 +109,10 @@ async def run_translation_job(
             async with analyze_sem:
                 img_bytes = img_path.read_bytes()
                 res = await analyzer.analyze_page(img_bytes, page_number=idx)
+                if res.get("status") != "success":
+                    logger.warning("Analysis fallback for page %d: %s. Retrying after 2s...", idx, res.get("error"))
+                    await asyncio.sleep(2.0)
+                    res = await analyzer.analyze_page(img_bytes, page_number=idx)
                 # Update progress
                 job.current_page = max(job.current_page, idx)
                 return res
@@ -116,6 +120,10 @@ async def run_translation_job(
         analyze_tasks = [analyze_one(idx, p) for idx, p in downloaded_pages]
         pages_analysis = await asyncio.gather(*analyze_tasks)
         pages_analysis.sort(key=lambda x: x.get("page_number", 0))
+
+        failed_analyses = [a for a in pages_analysis if a.get("status") == "fallback"]
+        if failed_analyses and len(failed_analyses) == len(pages_analysis):
+            raise RuntimeError(f"Vision analysis failed on all pages: {failed_analyses[0].get('error')}")
 
         # Update records
         for analysis in pages_analysis:
@@ -165,7 +173,12 @@ async def run_translation_job(
 
             if not page_regions and not page_trans:
                 # If page had no text (e.g. pure artwork)
-                return (idx, None, "rendered")
+                rendered_path = trans_dir / f"page_{idx:04d}.png"
+                try:
+                    orig_pil.save(rendered_path, format="PNG")
+                except Exception:
+                    shutil.copyfile(img_path, rendered_path)
+                return (idx, rendered_path, "rendered")
 
             rendered_pil = renderer.render_page(orig_pil, page_regions, page_trans)
             rendered_path = trans_dir / f"page_{idx:04d}.png"

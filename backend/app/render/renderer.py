@@ -2,6 +2,7 @@ from PIL import Image, ImageDraw
 from typing import List, Dict, Any
 from .inpaint import erase_text_regions
 from .typeset import typeset_text_bubble
+from ..ai.watermark import is_credit_or_watermark
 from ..core.logging import logger
 
 class PageRenderer:
@@ -26,12 +27,17 @@ class PageRenderer:
                 r_id = int(r.get("id", 0))
             except (ValueError, TypeError):
                 r_id = r.get("id")
+            source_text = r.get("source_text", "").strip()
             translated_text = translation_map.get(r_id, "").strip()
             pixel_bbox = r.get("pixel_bbox")
 
+            # Skip watermark and credits completely
+            if is_credit_or_watermark(source_text) or is_credit_or_watermark(translated_text):
+                continue
+
             if pixel_bbox and len(pixel_bbox) == 4:
                 # If there is translated text or if it was marked as dialogue, erase it
-                if translated_text or r.get("source_text"):
+                if translated_text or source_text:
                     bboxes_to_erase.append(pixel_bbox)
                 if translated_text:
                     regions_to_typeset.append((pixel_bbox, translated_text))
