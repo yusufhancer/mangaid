@@ -426,11 +426,9 @@ async def get_or_generate_page_audio(
     wav_path = audio_dir / f"page_{page_number:04d}_{voice_key}.wav"
     mp3_path = audio_dir / f"page_{page_number:04d}_{voice_key}.mp3"
 
-    # Return cached audio if available
+    # Return cached high-fidelity Gemini WAV audio if available
     if wav_path.exists() and wav_path.stat().st_size > 500:
         return wav_path
-    if mp3_path.exists() and mp3_path.stat().st_size > 500:
-        return mp3_path
 
     if not db:
         return None
@@ -468,16 +466,33 @@ async def get_or_generate_page_audio(
                 logger.info("Generated batch Gemini TTS page audio for p%d", page_number)
                 return wav_path
 
-    # Multi-voice page: synthesize each distinct bubble and stitch
-    gemini_segments: List[bytes] = []
-    gemini_failed = False
+    # Multi-voice page: Group consecutive bubbles of the same speaker/voice
+    # e.g. Monster speaks 2 lines, Girl speaks 1 line, Monster speaks 2 lines
+    grouped_segments: List[Tuple[str, str]] = []
+    current_voice = None
+    current_texts: List[str] = []
 
     for d, spec in zip(dialogues, specs):
         t = d["text"].strip()
         if not t or not any(c.isalnum() for c in t):
             continue
+        v = spec["gemini_voice"]
+        if v == current_voice:
+            current_texts.append(t)
+        else:
+            if current_texts and current_voice:
+                grouped_segments.append((" ... ".join(current_texts), current_voice))
+            current_voice = v
+            current_texts = [t]
 
-        chunk = await asyncio.to_thread(_call_gemini_tts_sync, t, spec["gemini_voice"])
+    if current_texts and current_voice:
+        grouped_segments.append((" ... ".join(current_texts), current_voice))
+
+    gemini_segments: List[bytes] = []
+    gemini_failed = False
+
+    for grp_text, grp_voice in grouped_segments:
+        chunk = await asyncio.to_thread(_call_gemini_tts_sync, grp_text, grp_voice)
         if chunk and len(chunk) > 1000:
             gemini_segments.append(chunk)
         else:
@@ -494,6 +509,10 @@ async def get_or_generate_page_audio(
                 return wav_path
 
     # 2. Backup Fallback: Edge-TTS Neural Stitching
+    # If a fallback mp3 already exists from earlier, return it now (since Gemini failed)
+    if mp3_path.exists() and mp3_path.stat().st_size > 500:
+        return mp3_path
+
     logger.info("Using Edge-TTS fallback for page %d", page_number)
     edge_segments: List[bytes] = []
     for d in dialogues:
