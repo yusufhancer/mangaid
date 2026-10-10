@@ -30,8 +30,22 @@ class Settings(BaseSettings):
 
     @property
     def gemini_api_keys(self) -> list[str]:
+        keys = []
         raw = self.GEMINI_API_KEY or ""
-        return [k.strip() for k in raw.split(",") if k.strip()]
+        for k in raw.split(","):
+            k_clean = k.strip()
+            if k_clean and k_clean not in keys:
+                keys.append(k_clean)
+
+        # Also collect GEMINI_API_KEY-2, GEMINI_API_KEY_2, GEMINI_API_KEY-3, etc. from environment
+        for env_k, env_val in os.environ.items():
+            upper = env_k.upper().replace("-", "_")
+            if upper.startswith("GEMINI_API_KEY_") and env_val.strip():
+                val = env_val.strip()
+                if val not in keys:
+                    keys.append(val)
+
+        return keys
 
     @property
     def primary_gemini_api_key(self) -> str:
