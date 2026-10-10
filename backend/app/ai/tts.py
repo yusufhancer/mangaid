@@ -1,50 +1,61 @@
 import os
+import io
 import json
+import wave
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import edge_tts
 from sqlalchemy.orm import Session
+from google import genai
+from google.genai import types
 
 from ..core.config import settings
 from ..core.logging import logger
 from ..db.models import PageRecord, Chapter
 
-VOICES = {
-    "ardi": "id-ID-ArdiNeural",     # Suara Pria: Wibawa, Shounen, Kuat
-    "gadis": "id-ID-GadisNeural",   # Suara Wanita: Hangat, Halus, Heroine
-    "ja": "ja-JP-NanamiNeural",
-    "en": "en-US-JennyNeural",
-}
-
 DEFAULT_VOICE = "auto"
 
-def classify_dialogue_voice_and_emotion(
+def classify_character_acting(
     dialogue: Dict[str, Any],
     default_voice_mode: str = "auto"
-) -> Tuple[str, str, str, str]:
+) -> Dict[str, Any]:
     """
-    Returns (voice_name, rate, pitch, volume) with dynamic voice acting tuning.
-    Analyzes character gender, narration, and emotion from text punctuation and semantics.
+    Classifies character role, Gemini voice, and rich acting emotion prompt.
+    Includes seamless Edge-TTS fallback parameters.
     """
     text = dialogue.get("text", "").strip()
     r_type = dialogue.get("type", "dialogue")
     gender = (dialogue.get("gender") or "").lower().strip()
     speaker = (dialogue.get("speaker") or "").lower().strip()
+    lowered = text.lower()
 
-    # 1. Narration Check
-    if r_type == "narration" or "narator" in speaker or "narrator" in speaker:
-        return ("id-ID-ArdiNeural", "-4%", "-12Hz", "+10%")
-
-    # 2. Monster / Ghost / Creature Check (Eerie voice acting)
+    # 1. Monster / Ghost / Creature (Chilling Horror Acting)
     monster_clues = ["monster", "ghost", "hantu", "demon", "creature", "iblis", "setan", "makhluk", "beast", "zombie", "alien"]
     if any(k in speaker for k in monster_clues):
-        rate = "-10%"
-        pitch = "-18Hz"
-        volume = "+20%"
-        return ("id-ID-ArdiNeural", rate, pitch, volume)
+        return {
+            "gemini_voice": "Charon",
+            "edge_voice": "id-ID-ArdiNeural",
+            "edge_rate": "-10%",
+            "edge_pitch": "-18Hz",
+            "edge_vol": "+20%",
+            "role_desc": "Makhluk monster / hantu yang mengerikan",
+            "acting_desc": "Suara berat, dingin, berbisik misterius dan menakutkan, membuat bulu kuduk merinding.",
+        }
 
-    # 3. Gender classification
+    # 2. Narration
+    if r_type == "narration" or "narator" in speaker or "narrator" in speaker:
+        return {
+            "gemini_voice": "Fenrir",
+            "edge_voice": "id-ID-ArdiNeural",
+            "edge_rate": "-4%",
+            "edge_pitch": "-12Hz",
+            "edge_vol": "+10%",
+            "role_desc": "Narator komik profesional",
+            "acting_desc": "Intonasi narasi cerita yang berwibawa, jernih, dan memikat pembaca.",
+        }
+
+    # 3. Gender determination
     female_clues = [
         "girl", "woman", "female", "she", "miko", "mie", "miruko", "nami", "robin", 
         "sakura", "hinata", "chan", "san", "mba", "mbak", "ibu", "mama", "cewek", 
@@ -70,21 +81,17 @@ def classify_dialogue_voice_and_emotion(
     elif any(k in speaker for k in male_clues):
         is_female = False
     else:
-        # Dialogue text inferences
-        lowered = text.lower()
         if any(w in lowered for w in ["rokku", "rok ", "mas ", "kakak ", "oppa", "senpai"]):
             is_female = True
         else:
             is_female = False
 
-    voice_name = "id-ID-GadisNeural" if is_female else "id-ID-ArdiNeural"
-
-    # 4. Dynamic Emotion & Prosody
+    # 4. Punctuation & Emotion Nuances
     is_shouting = (
         text.endswith("!") or
         "!!" in text or
         text.isupper() or
-        any(w in text.lower() for w in ["sial", "mati", "awas", "brengsek", "bangsat", "cepat", "hei!", "apa?!", "tidak!!", "kabur"])
+        any(w in lowered for w in ["sial", "mati", "awas", "brengsek", "bangsat", "cepat", "hei!", "apa?!", "tidak!!", "kabur"])
     )
     is_thought = (
         r_type == "thought" or
@@ -93,28 +100,48 @@ def classify_dialogue_voice_and_emotion(
     )
     is_question = text.endswith("?")
 
-    if is_thought:
-        # Inner thought / gentle whisper
-        rate = "-8%"
-        pitch = "-4Hz" if is_female else "-6Hz"
-        volume = "-18%"
-    elif is_shouting:
-        # Battle cry / Shouting / High emotion
-        rate = "+8%"
-        pitch = "+18Hz" if is_female else "+14Hz"
-        volume = "+25%"
-    elif is_question:
-        # Inquisitive question
-        rate = "+3%"
-        pitch = "+8Hz" if is_female else "+6Hz"
-        volume = "+5%"
+    if is_female:
+        gemini_voice = "Aoede"
+        edge_voice = "id-ID-GadisNeural"
+        role_desc = "Karakter cewek anime"
+        if is_thought:
+            acting_desc = "Suara batin gadis anime, berbisik lembut, cemas dan intim."
+            edge_rate, edge_pitch, edge_vol = "-8%", "-4Hz", "-18%"
+        elif is_shouting:
+            acting_desc = "Gadis anime berteriak panik, kaget, dan emosional."
+            edge_rate, edge_pitch, edge_vol = "+8%", "+18Hz", "+25%"
+        elif is_question:
+            acting_desc = "Gadis anime bertanya penasaran dengan nada naik yang manis dan bingung."
+            edge_rate, edge_pitch, edge_vol = "+3%", "+8Hz", "+5%"
+        else:
+            acting_desc = "Gadis anime berbicara santai, hidup, hangat, dan ekspresif."
+            edge_rate, edge_pitch, edge_vol = "+4%", "+4Hz", "+0%"
     else:
-        # Conversational lively speech
-        rate = "+4%"
-        pitch = "+4Hz" if is_female else "+2Hz"
-        volume = "+0%"
+        gemini_voice = "Puck" if any(w in lowered for w in ["bocah", "bro", "hei", "haha", "aku", "gua"]) else "Fenrir"
+        edge_voice = "id-ID-ArdiNeural"
+        role_desc = "Karakter cowok anime"
+        if is_thought:
+            acting_desc = "Suara batin cowok anime bergumam lirih dan tenang."
+            edge_rate, edge_pitch, edge_vol = "-8%", "-6Hz", "-18%"
+        elif is_shouting:
+            acting_desc = "Cowok anime berteriak penuh semangat tempur membara dan lantang."
+            edge_rate, edge_pitch, edge_vol = "+8%", "+14Hz", "+25%"
+        elif is_question:
+            acting_desc = "Cowok anime bertanya heran dan penasaran."
+            edge_rate, edge_pitch, edge_vol = "+3%", "+6Hz", "+5%"
+        else:
+            acting_desc = "Cowok anime berbicara luwes, percaya diri, dan alami."
+            edge_rate, edge_pitch, edge_vol = "+4%", "+2Hz", "+0%"
 
-    return (voice_name, rate, pitch, volume)
+    return {
+        "gemini_voice": gemini_voice,
+        "edge_voice": edge_voice,
+        "edge_rate": edge_rate,
+        "edge_pitch": edge_pitch,
+        "edge_vol": edge_vol,
+        "role_desc": role_desc,
+        "acting_desc": acting_desc,
+    }
 
 def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[Dict[str, Any]]:
     """
@@ -163,22 +190,91 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
     dialogues.sort(key=manga_sort_key)
     return dialogues
 
-async def synthesize_chunk_to_bytes(voice_name: str, text: str, rate: str, pitch: str, volume: str) -> Optional[bytes]:
-    """Synthesizes a single dialogue chunk using edge_tts with prosody controls."""
-    clean_text = text.strip()
-    if not clean_text or not any(c.isalnum() for c in clean_text):
+def _call_gemini_tts_sync(text: str, voice_name: str, role_desc: str, acting_desc: str) -> Optional[bytes]:
+    """Synchronous Google GenAI Gemini 3.8 Flash TTS call with rich expressive acting instructions."""
+    if not settings.GEMINI_API_KEY:
+        return None
+    try:
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        acting_prompt = (
+            f"Bacakan dialog komik berikut ini dalam bahasa Indonesia dengan gaya akting anime yang sangat ekspresif, "
+            f"hidup, dan berjiwa manusia.\n"
+            f"Peran: {role_desc}\n"
+            f"Gaya & Emosi: {acting_desc}\n"
+            f"Kalimat dialog: \"{text}\"\n\n"
+            f"PENTING: Hanya ucapkan isi kalimatnya saja dengan akting yang diminta, jangan menambah kata pengantar atau penjelasan."
+        )
+        resp = client.models.generate_content(
+            model="gemini-3.8-flash-tts",
+            contents=acting_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=voice_name
+                        )
+                    )
+                )
+            )
+        )
+        if resp.candidates and resp.candidates[0].content.parts:
+            for part in resp.candidates[0].content.parts:
+                if part.inline_data and part.inline_data.data:
+                    return part.inline_data.data
+        return None
+    except Exception as e:
+        logger.warning("Gemini 3.8 Flash TTS error (%s): %s", voice_name, e)
         return None
 
+async def _call_edge_tts(text: str, voice_name: str, rate: str, pitch: str, volume: str) -> Optional[bytes]:
+    """Fallback Edge-TTS neural synthesizer."""
     try:
-        comm = edge_tts.Communicate(text=clean_text, voice=voice_name, rate=rate, pitch=pitch, volume=volume)
+        comm = edge_tts.Communicate(text=text, voice=voice_name, rate=rate, pitch=pitch, volume=volume)
         chunks = []
         async for chunk in comm.stream():
             if chunk["type"] == "audio":
                 chunks.append(chunk["data"])
         return b"".join(chunks)
     except Exception as e:
-        logger.error("TTS synthesis error (%s): %s", voice_name, e)
+        logger.error("Edge-TTS error (%s): %s", voice_name, e)
         return None
+
+def stitch_wav_buffers(wav_bytes_list: List[bytes]) -> Optional[bytes]:
+    """
+    Seamlessly merges multiple WAV audio segments into a single WAV audio track
+    with a natural 250ms conversational silence between character bubbles.
+    """
+    if not wav_bytes_list:
+        return None
+    if len(wav_bytes_list) == 1:
+        return wav_bytes_list[0]
+
+    try:
+        first_buf = io.BytesIO(wav_bytes_list[0])
+        with wave.open(first_buf, "rb") as w0:
+            params = w0.getparams()
+            framerate = w0.getframerate()
+            nchannels = w0.getnchannels()
+            sampwidth = w0.getsampwidth()
+
+        # 250ms natural pause between bubbles
+        pause_frames = int(framerate * 0.25)
+        silence = b"\x00" * (pause_frames * nchannels * sampwidth)
+
+        out_buf = io.BytesIO()
+        with wave.open(out_buf, "wb") as out_w:
+            out_w.setparams(params)
+            for i, wb in enumerate(wav_bytes_list):
+                if i > 0:
+                    out_w.writeframes(silence)
+                with wave.open(io.BytesIO(wb), "rb") as cur_w:
+                    out_w.writeframes(cur_w.readframes(cur_w.getnframes()))
+
+        return out_buf.getvalue()
+    except Exception as e:
+        logger.error("Error stitching WAV buffers: %s", e)
+        return wav_bytes_list[0]
 
 async def get_or_generate_page_audio(
     chapter_id: str,
@@ -187,14 +283,19 @@ async def get_or_generate_page_audio(
     db: Session = None
 ) -> Optional[Path]:
     """
-    Generates intelligent auto-cast multi-voice audio narration for a manga page.
-    Automatically assigns male, female, and narrator voices with emotional prosody.
+    Generates expressive anime voice acting audio for a manga page.
+    Uses Google Gemini 3.8 Flash Generative TTS first, with graceful Edge-TTS fallback.
+    Caches audio to disk so repeat playback takes 0 API calls.
     """
     audio_dir = settings.data_path / "chapters" / chapter_id / "audio"
-    audio_path = audio_dir / f"page_{page_number:04d}_{voice_key}.mp3"
+    wav_path = audio_dir / f"page_{page_number:04d}_{voice_key}.wav"
+    mp3_path = audio_dir / f"page_{page_number:04d}_{voice_key}.mp3"
 
-    if audio_path.exists() and audio_path.stat().st_size > 500:
-        return audio_path
+    # Return cached audio if available
+    if wav_path.exists() and wav_path.stat().st_size > 500:
+        return wav_path
+    if mp3_path.exists() and mp3_path.stat().st_size > 500:
+        return mp3_path
 
     if not db:
         return None
@@ -204,40 +305,99 @@ async def get_or_generate_page_audio(
         return None
 
     audio_dir.mkdir(parents=True, exist_ok=True)
-    audio_segments: List[bytes] = []
 
-    # Synthesize each bubble with its assigned character voice and emotional prosody
+    # 1. Attempt Primary: Gemini 3.8 Flash Generative Acting TTS
+    gemini_segments: List[bytes] = []
+    gemini_failed = False
+
     for d in dialogues:
         t = d["text"].strip()
         if not t or not any(c.isalnum() for c in t):
             continue
 
-        voice_name, rate, pitch, volume = classify_dialogue_voice_and_emotion(d, default_voice_mode=voice_key)
-        audio_chunk = await synthesize_chunk_to_bytes(voice_name, t, rate, pitch, volume)
-        if audio_chunk:
-            audio_segments.append(audio_chunk)
+        spec = classify_character_acting(d, default_voice_mode=voice_key)
+        chunk = await asyncio.to_thread(
+            _call_gemini_tts_sync,
+            t,
+            spec["gemini_voice"],
+            spec["role_desc"],
+            spec["acting_desc"]
+        )
+        if chunk and len(chunk) > 1000:
+            gemini_segments.append(chunk)
+        else:
+            gemini_failed = True
+            break
 
-    if not audio_segments:
+    if not gemini_failed and gemini_segments:
+        stitched_wav = stitch_wav_buffers(gemini_segments)
+        if stitched_wav:
+            with open(wav_path, "wb") as f_out:
+                f_out.write(stitched_wav)
+            if wav_path.exists() and wav_path.stat().st_size > 500:
+                logger.info("Successfully generated page audio via Gemini 3.8 Flash TTS for p%d", page_number)
+                return wav_path
+
+    # 2. Backup Fallback: Edge-TTS Neural Stitching
+    logger.info("Using Edge-TTS fallback for page %d", page_number)
+    edge_segments: List[bytes] = []
+    for d in dialogues:
+        t = d["text"].strip()
+        if not t or not any(c.isalnum() for c in t):
+            continue
+
+        spec = classify_character_acting(d, default_voice_mode=voice_key)
+        chunk = await _call_edge_tts(
+            t,
+            spec["edge_voice"],
+            spec["edge_rate"],
+            spec["edge_pitch"],
+            spec["edge_vol"]
+        )
+        if chunk:
+            edge_segments.append(chunk)
+
+    if not edge_segments:
         return None
 
-    # Stitch all audio segments together
-    with open(audio_path, "wb") as f_out:
-        for seg in audio_segments:
+    with open(mp3_path, "wb") as f_out:
+        for seg in edge_segments:
             f_out.write(seg)
 
-    if audio_path.exists() and audio_path.stat().st_size > 500:
-        return audio_path
+    if mp3_path.exists() and mp3_path.stat().st_size > 500:
+        return mp3_path
 
     return None
 
 async def synthesize_single_bubble(text: str, voice_key: str = "auto") -> Optional[bytes]:
     """
     Instant tap-to-speak synthesis for a single dialogue bubble.
+    Tries Gemini 3.8 Flash TTS first, falls back to Edge-TTS.
     """
     clean_text = text.strip()
     if not clean_text or not any(c.isalnum() for c in clean_text):
         return None
 
     dummy_d = {"text": clean_text, "type": "dialogue"}
-    voice_name, rate, pitch, volume = classify_dialogue_voice_and_emotion(dummy_d, default_voice_mode=voice_key)
-    return await synthesize_chunk_to_bytes(voice_name, clean_text, rate, pitch, volume)
+    spec = classify_character_acting(dummy_d, default_voice_mode=voice_key)
+
+    # 1. Try Gemini
+    if settings.GEMINI_API_KEY:
+        gemini_chunk = await asyncio.to_thread(
+            _call_gemini_tts_sync,
+            clean_text,
+            spec["gemini_voice"],
+            spec["role_desc"],
+            spec["acting_desc"]
+        )
+        if gemini_chunk and len(gemini_chunk) > 1000:
+            return gemini_chunk
+
+    # 2. Fallback Edge-TTS
+    return await _call_edge_tts(
+        clean_text,
+        spec["edge_voice"],
+        spec["edge_rate"],
+        spec["edge_pitch"],
+        spec["edge_vol"]
+    )

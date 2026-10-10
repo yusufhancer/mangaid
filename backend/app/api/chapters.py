@@ -337,9 +337,10 @@ async def get_page_narration_audio(
     if not audio_path or not audio_path.exists():
         raise HTTPException(status_code=404, detail="Tidak ada dialog yang dapat dibacakan pada halaman ini.")
 
+    media_type = "audio/wav" if Path(audio_path).suffix.lower() == ".wav" else "audio/mpeg"
     return FileResponse(
         str(audio_path),
-        media_type="audio/mpeg",
+        media_type=media_type,
         headers={"Cache-Control": "public, max-age=86400"}
     )
 
@@ -357,13 +358,14 @@ async def get_single_bubble_audio(
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
     from ..ai.tts import synthesize_single_bubble
-    mp3_bytes = await synthesize_single_bubble(clean_text, voice_key=voice)
-    if not mp3_bytes:
+    audio_bytes = await synthesize_single_bubble(clean_text, voice_key=voice)
+    if not audio_bytes:
         raise HTTPException(status_code=500, detail="Failed to synthesize speech.")
 
+    media_type = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
     return Response(
-        content=mp3_bytes,
-        media_type="audio/mpeg",
+        content=audio_bytes,
+        media_type=media_type,
         headers={"Cache-Control": "public, max-age=86400"}
     )
 

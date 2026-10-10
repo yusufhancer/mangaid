@@ -2702,12 +2702,12 @@ export default function MangaIDApp() {
                   </div>
                   <div className="text-[10px] text-[#8E8B84] font-mono truncate">
                     {audioLoading
-                      ? "Membuat suara neural..."
+                      ? "✨ AI Mengisi Suara Drama Komik..."
                       : audioError
                       ? audioError
                       : audioPlaying
                       ? audioVoice === "auto"
-                        ? "🎭 Mode Drama Auto (Multi-Karakter)"
+                        ? "🎭 Drama Komik AI (Gemini Voice Acting)"
                         : `Narasi AI Aktif (${audioVoice === "gadis" ? "Gadis" : "Ardi"})`
                       : "Dijeda"}
                   </div>
