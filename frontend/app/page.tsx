@@ -36,7 +36,15 @@ import {
   Play,
   Pause,
   Volume2,
+  Sparkles,
 } from "lucide-react";
+
+interface AppVersionInfo {
+  version: string;
+  release_date: string;
+  title: string;
+  changelog: string[];
+}
 
 const BACKEND_URL = "";
 
@@ -234,6 +242,11 @@ export default function MangaIDApp() {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncIdInput, setSyncIdInput] = useState("");
 
+  // App Update Notification states
+  const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
+  const [hasNewUpdate, setHasNewUpdate] = useState<boolean>(false);
+  const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
+
   // Device & Workspace management
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -257,6 +270,40 @@ export default function MangaIDApp() {
       headers.set("X-Device-Id", currentId);
     }
     return fetch(url, { ...options, headers });
+  };
+
+  // Check server version & show update modal/banner if new
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const resp = await apiFetch(`${BACKEND_URL}/api/version`);
+        if (resp.ok) {
+          const data: AppVersionInfo = await resp.json();
+          setVersionInfo(data);
+          if (typeof window !== "undefined") {
+            const lastSeen = localStorage.getItem("mangaid_last_seen_version");
+            if (lastSeen !== data.version) {
+              setHasNewUpdate(true);
+              setShowUpdateModal(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.debug("Version check error:", err);
+      }
+    };
+    checkVersion();
+  }, []);
+
+  const handleAcknowledgeUpdate = (reload: boolean = false) => {
+    if (versionInfo && typeof window !== "undefined") {
+      localStorage.setItem("mangaid_last_seen_version", versionInfo.version);
+    }
+    setShowUpdateModal(false);
+    setHasNewUpdate(false);
+    if (reload && typeof window !== "undefined") {
+      window.location.reload();
+    }
   };
 
   const handleCopyDeviceId = () => {
@@ -1205,6 +1252,31 @@ export default function MangaIDApp() {
                 <History className="w-4 h-4" strokeWidth={1.5} />
                 <span>Riwayat</span>
               </button>
+
+              <button
+                onClick={() => setShowUpdateModal(true)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-[6px] text-xs font-medium transition-colors cursor-pointer ${
+                  hasNewUpdate
+                    ? "bg-[#E8452C]/15 border border-[#E8452C]/30 text-[#FF5A40] hover:bg-[#E8452C]/25"
+                    : "text-[#8E8B84] hover:text-[#ECE9E2] hover:bg-[#151516]"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Sparkles className="w-4 h-4 text-[#E8452C]" strokeWidth={1.5} />
+                  <span>Update & Info</span>
+                </div>
+                {versionInfo && (
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded-[3px] ${
+                      hasNewUpdate
+                        ? "bg-[#E8452C] text-white font-bold animate-pulse"
+                        : "bg-[#1C1C1E] border border-[#2A2A2C] text-[#8E8B84]"
+                    }`}
+                  >
+                    v{versionInfo.version}
+                  </span>
+                )}
+              </button>
             </nav>
           </div>
 
@@ -1260,6 +1332,16 @@ export default function MangaIDApp() {
             </div>
 
             <div className="flex items-center gap-2">
+              {hasNewUpdate && versionInfo && (
+                <button
+                  onClick={() => setShowUpdateModal(true)}
+                  className="flex items-center gap-1 text-[11px] font-mono text-[#FF5A40] bg-[#E8452C]/15 border border-[#E8452C]/30 px-2 py-1.5 rounded-[6px] cursor-pointer hover:bg-[#E8452C]/25 active:scale-95 transition-all animate-pulse"
+                >
+                  <Sparkles className="w-3 h-3 text-[#E8452C]" />
+                  <span>Update</span>
+                </button>
+              )}
+
               {!isAppInstalled && (
                 <button
                   onClick={handleInstallPWA}
@@ -1280,6 +1362,42 @@ export default function MangaIDApp() {
               </button>
             </div>
           </header>
+        )}
+
+        {/* Top Update Notification Banner */}
+        {hasNewUpdate && versionInfo && view !== "reader" && (
+          <div className="bg-gradient-to-r from-[#E8452C]/20 via-[#E8452C]/10 to-[#E8452C]/20 border-b border-[#E8452C]/30 px-4 lg:px-8 py-2.5 flex items-center justify-between text-xs animate-fade-in z-20">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-2 w-2 relative flex-shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF5A40] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E8452C]"></span>
+              </span>
+              <div className="flex items-center gap-2 truncate">
+                <span className="font-semibold text-[#ECE9E2]">
+                  Pembaruan MangaID {versionInfo.version} Tersedia!
+                </span>
+                <span className="hidden md:inline text-[#8E8B84] text-[11px]">
+                  — {versionInfo.title}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+              <button
+                onClick={() => setShowUpdateModal(true)}
+                className="px-2.5 py-1 rounded-[4px] bg-[#E8452C] hover:bg-[#FF5A40] text-white font-semibold text-[11px] transition-all cursor-pointer shadow-sm btn-press flex items-center gap-1"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Lihat Update</span>
+              </button>
+              <button
+                onClick={() => handleAcknowledgeUpdate(false)}
+                className="text-[#8E8B84] hover:text-[#ECE9E2] p-1 cursor-pointer transition-colors"
+                title="Tutup pemberitahuan"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Desktop Top Sub-Bar / Breadcrumb (Hidden on Mobile and Reader) */}
@@ -3430,6 +3548,74 @@ export default function MangaIDApp() {
                     <span>Ya, Hapus</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* App Update Notification Modal */}
+      {showUpdateModal && versionInfo && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#151516] border border-[#2A2A2C] rounded-[8px] max-w-lg w-full p-6 shadow-2xl relative animate-scale-in">
+            <button
+              onClick={() => handleAcknowledgeUpdate(false)}
+              className="absolute top-4 right-4 text-[#8E8B84] hover:text-[#ECE9E2] transition-colors p-1 rounded-[4px] cursor-pointer"
+            >
+              <X className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 rounded-[8px] bg-[#E8452C]/10 border border-[#E8452C]/25 text-[#E8452C] flex-shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#E8452C]/20 text-[#FF5A40] border border-[#E8452C]/30 font-bold">
+                    v{versionInfo.version} (Terbaru)
+                  </span>
+                  <span className="text-[11px] font-mono text-[#8E8B84]">
+                    {versionInfo.release_date}
+                  </span>
+                </div>
+                <h3 className="font-display text-base font-bold text-[#ECE9E2] truncate">
+                  {versionInfo.title}
+                </h3>
+              </div>
+            </div>
+
+            {/* Changelog Items */}
+            <div className="my-4 p-4 rounded-[6px] bg-[#111112] border border-[#2A2A2C] space-y-3">
+              <h4 className="text-[11px] font-mono uppercase tracking-wider text-[#8E8B84] font-semibold flex items-center gap-1.5">
+                <span>Catatan Pembaruan & Fitur Baru:</span>
+              </h4>
+              <ul className="space-y-2.5 text-xs text-[#ECE9E2]">
+                {versionInfo.changelog.map((item, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5">
+                    <div className="w-4 h-4 rounded-full bg-[#E8452C]/20 text-[#FF5A40] flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check className="w-2.5 h-2.5" strokeWidth={2.5} />
+                    </div>
+                    <span className="leading-relaxed">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                onClick={() => handleAcknowledgeUpdate(true)}
+                className="flex-1 py-2.5 rounded-[6px] bg-[#E8452C] hover:bg-[#FF5A40] font-semibold text-xs text-white transition-all cursor-pointer btn-press shadow-md shadow-[#E8452C]/20 flex items-center justify-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Perbarui & Muat Ulang</span>
+              </button>
+              <button
+                onClick={() => handleAcknowledgeUpdate(false)}
+                className="px-4 py-2.5 rounded-[6px] bg-[#1C1C1E] hover:bg-[#2A2A2C] border border-[#2A2A2C] text-xs text-[#8E8B84] hover:text-[#ECE9E2] transition-colors cursor-pointer"
+              >
+                Tutup
               </button>
             </div>
           </div>
