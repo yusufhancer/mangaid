@@ -96,6 +96,7 @@ interface ChapterData {
   id: string;
   title: string | null;
   chapter_number: string | null;
+  language_source?: string | null;
   pages: ChapterPage[];
 }
 
@@ -162,31 +163,78 @@ interface ExplorerChapter {
 
 const SOURCE_GENRES: Record<"mangadex" | "raw" | "komikindo" | "nhentai", string[]> = {
   mangadex: [
-    "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mystery",
-    "Psychological", "Romance", "Sci-Fi", "Slice of Life", "Supernatural",
-    "Thriller", "Isekai", "Historical", "Martial Arts", "School Life", "Shounen",
-    "Shoujo", "Seinen", "Josei", "Sports", "Mecha", "Magic", "Tragedy",
-    "Post-Apocalyptic", "Reincarnation", "Time Travel", "Survival", "Demons",
-    "Monsters", "Vampires", "Zombies", "Crime", "Harem", "Reverse Harem"
+    "4-Koma", "Action", "Adaptation", "Adventure", "Aliens", "Animals", "Anthology",
+    "Award Winning", "Boys' Love", "Comedy", "Cooking", "Crime", "Crossdressing",
+    "Delinquents", "Demons", "Doujinshi", "Drama", "Fan Colored", "Fantasy",
+    "Full Color", "Genderswap", "Ghosts", "Girls' Love", "Gore", "Gyaru", "Harem",
+    "Historical", "Horror", "Incest", "Isekai", "Loli", "Long Strip", "Mafia",
+    "Magic", "Magical Girls", "Mahjong", "Martial Arts", "Mecha", "Medical",
+    "Military", "Monster Girls", "Monsters", "Music", "Mystery", "Ninja",
+    "Office Workers", "Official Colored", "Oneshot", "Philosophical", "Police",
+    "Post-Apocalyptic", "Psychological", "Reincarnation", "Reverse Harem", "Romance",
+    "Samurai", "School Life", "Sci-Fi", "Self-Published", "Sexual Violence", "Shota",
+    "Slice of Life", "Sports", "Superhero", "Supernatural", "Survival", "Thriller",
+    "Time Travel", "Traditional Games", "Tragedy", "Vampires", "Video Games",
+    "Villainess", "Virtual Reality", "Web Comic", "Wuxia", "Zombies"
   ],
   raw: [
-    "Action", "Fantasy", "Isekai", "RomCom", "Comedy", "Drama", "Seinen",
-    "Shounen", "Slice of Life", "Mystery", "Supernatural", "Sci-Fi", "Historical",
-    "School Life", "Josei", "Adventure", "Horror", "Reincarnation", "Psychological",
-    "Ecchi", "Magic", "Demons", "Martial Arts", "Harem"
+    "Action", "Fantasy", "Isekai", "Romance", "Comedy", "Drama", "Seinen",
+    "Shounen", "Shoujo", "Josei", "Slice of Life", "Mystery", "Supernatural",
+    "Sci-Fi", "Historical", "School Life", "Adventure", "Horror", "Reincarnation",
+    "Psychological", "Ecchi", "Magic", "Demons", "Martial Arts", "Harem",
+    "RAW Jepang", "RAW Korea", "4-Koma", "Adaptation", "Aliens", "Animals",
+    "Anthology", "Award Winning", "Boys' Love", "Cooking", "Crime", "Crossdressing",
+    "Delinquents", "Doujinshi", "Fan Colored", "Full Color", "Genderswap", "Ghosts",
+    "Girls' Love", "Gore", "Gyaru", "Incest", "Loli", "Long Strip", "Mafia",
+    "Magical Girls", "Mahjong", "Mecha", "Medical", "Military", "Monster Girls",
+    "Monsters", "Music", "Ninja", "Office Workers", "Official Colored", "Oneshot",
+    "Philosophical", "Police", "Post-Apocalyptic", "Reverse Harem", "Samurai",
+    "Self-Published", "Sexual Violence", "Shota", "Sports", "Superhero", "Survival",
+    "Thriller", "Time Travel", "Traditional Games", "Tragedy", "Vampires",
+    "Video Games", "Villainess", "Virtual Reality", "Web Comic", "Wuxia", "Zombies"
   ],
   komikindo: [
-    "Action", "Adventure", "Fantasy", "Isekai", "Reinkarnasi", "System",
-    "Cultivation", "Overpowered", "Manhwa", "Manhua", "Martial Arts", "Magic",
-    "Dungeon", "Romance", "Comedy", "School", "Drama", "Supernatural",
-    "Shounen", "Monster", "Leveling", "Game", "Murim"
+    "Action", "Adult", "Adventure", "Aliens", "Animals", "Arts", "Boys' Love",
+    "Comedy", "Cooking", "Crime", "Crossdressing", "Cultivation", "Delinquents",
+    "Demons", "Drama", "Drama Supernatural", "Dungeon", "Ecchi", "Erotica",
+    "Fantasy", "Game", "Gender Bender", "Genderswap", "Ghosts", "Girls' Love",
+    "Gore", "Gyaru", "Harem", "Historical", "Horror", "Incest", "Isekai",
+    "Josei", "Life", "Loli", "Mafia", "Magic", "Magical Girls", "Manhua",
+    "Manhwa", "Martial", "Martial Arts", "Mature", "Mecha", "Medical",
+    "Military", "Monster Girls", "Monsters", "Murim", "Music", "Mystery",
+    "Ninja", "Office Workers", "Overpowered", "Philosophical", "Police",
+    "Post-Apocalyptic", "Psychological", "Reincarnation", "Reverse Harem",
+    "Romance", "Samurai", "School", "School Life", "Sci-Fi", "Seinen",
+    "Sexual Violence", "Shota", "Shotacon", "Shoujo", "Shoujo Ai", "Shounen",
+    "Shounen Ai", "Slice of Life", "Smut", "Sports", "Superhero", "Supernatural",
+    "Survival", "System", "Thriller", "Time Travel", "Traditional Games",
+    "Tragedy", "Vampires", "Video Games", "Villainess", "Virtual Reality",
+    "Wuxia", "Yaoi", "Yuri", "Zombies"
   ],
   nhentai: [
-    "Vanilla", "Romance", "Milf", "Schoolgirl Uniform", "Yuri", "Stockings",
-    "Ahegao", "Nakadashi", "Blowjob", "Maid", "Incest", "Impregnation",
-    "Dark Skin", "Glasses", "Netorare", "Big Breasts", "Group", "Paizuri",
-    "Sole Female", "Sole Male", "Virgin", "Swimsuit", "Bunny Girl", "Cosplay",
-    "Teacher", "Gyaru", "Mind Break", "Femdom", "Cheating", "Bondage"
+    "ahegao", "anal", "apron", "ass expansion", "bald", "ball caressing", "bbm", "bbw",
+    "beauty mark", "big areolae", "big ass", "big breasts", "big penis", "bikini",
+    "blackmail", "blowjob", "body modification", "bodysuit", "bondage", "breast expansion",
+    "breast feeding", "bukkake", "bunny girl", "cbt", "cheating", "chikan", "classroom",
+    "collar", "condom", "cosplaying", "crossdressing", "crotch tattoo", "cunnilingus",
+    "dark skin", "deepthroat", "defloration", "demon girl", "dickgirl on female", "dilf",
+    "double penetration", "drugs", "elf", "exhibitionism", "eye-covering bang", "farting",
+    "females only", "femdom", "ffm threesome", "filming", "fingering",
+    "first person perspective", "focus paizuri", "footjob", "forced exposure", "full color",
+    "futanari", "garter belt", "gender change", "gender morph", "glasses", "gloves",
+    "gokkun", "group", "gyaru", "hairy", "handjob", "harem", "horns", "humiliation",
+    "impregnation", "incest", "kemonomimi", "kimono", "kissing", "lab coat", "latex",
+    "leg lock", "lingerie", "maid", "males only", "masturbation", "mermaid", "milf",
+    "mind break", "mind control", "miniguy", "mmf threesome", "monster girl",
+    "mosaic censorship", "multi-work series", "nakadashi", "nekomimi", "netorare",
+    "no penetration", "nudity only", "nurse", "paizuri", "piercing", "ponytail",
+    "possession", "pregnant", "prostate massage", "prostitution", "rape", "reverse rape",
+    "ryona", "scat", "schoolboy uniform", "schoolgirl uniform", "shotacon", "small breasts",
+    "smell", "snuff", "sole female", "sole male", "spanking", "squirting", "stockings",
+    "swimsuit", "tall girl", "teacher", "tentacles", "threesome", "tomboy", "tomgirl",
+    "tracksuit", "transformation", "tribadism", "tsundere", "twintails", "uncensored",
+    "unusual pupils", "urination", "vanilla", "virginity", "voyeurism", "waitress",
+    "x-ray", "yandere", "yaoi", "yuri"
   ],
 };
 
@@ -209,6 +257,8 @@ export default function MangaIDApp() {
   const [explorerLoading, setExplorerLoading] = useState(false);
   const [explorerResults, setExplorerResults] = useState<ExplorerManga[]>([]);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [genreSearchInput, setGenreSearchInput] = useState("");
+  const [showGenreSearch, setShowGenreSearch] = useState(false);
   const [explorerHasSearched, setExplorerHasSearched] = useState(false);
   const [explorerSelectedManga, setExplorerSelectedManga] = useState<ExplorerManga | null>(null);
   const [explorerChapters, setExplorerChapters] = useState<ExplorerChapter[]>([]);
@@ -659,6 +709,27 @@ export default function MangaIDApp() {
 
       const savedData: ChapterData = await saveResp.json();
 
+      // Save directly to localStorage history cache as well
+      if (typeof window !== "undefined") {
+        try {
+          const currentHistory: SavedChapter[] = JSON.parse(localStorage.getItem("mangaid_user_history") || "[]");
+          const newEntry: SavedChapter = {
+            id: savedData.id,
+            title: savedData.title,
+            chapter_number: savedData.chapter_number,
+            language_source: savedData.language_source || "id",
+            total_pages: savedData.pages.length,
+            rendered_pages: savedData.pages.length,
+            created_at: new Date().toISOString(),
+          };
+          const updated = [newEntry, ...currentHistory.filter((c) => c.id !== savedData.id)];
+          localStorage.setItem("mangaid_user_history", JSON.stringify(updated));
+          localStorage.setItem(`mangaid_detail_${savedData.id}`, JSON.stringify(savedData));
+        } catch (e) {
+          console.warn("Local history cache error:", e);
+        }
+      }
+
       // 3. Buka langsung di reader & refresh riwayat
       setExplorerSelectedManga(null);
       setChapterData(savedData);
@@ -798,16 +869,94 @@ export default function MangaIDApp() {
     return () => clearInterval(interval);
   }, [view, jobId]);
 
-  // Load saved chapters from backend
+  // Load saved chapters from backend + persistent localStorage cache
   const loadSavedChapters = async () => {
+    // 1. Instantly load from localStorage so user never sees an empty screen
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("mangaid_user_history");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSavedChapters(parsed);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed loading cached history:", e);
+      }
+    }
+
     try {
       const resp = await apiFetch(`${BACKEND_URL}/api/chapters`);
       if (resp.ok) {
-        const data = await resp.json();
-        setSavedChapters(data);
+        const backendChapters: SavedChapter[] = await resp.json();
+        if (backendChapters && backendChapters.length > 0) {
+          setSavedChapters(backendChapters);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("mangaid_user_history", JSON.stringify(backendChapters));
+          }
+        } else {
+          // Backend database is empty (e.g. freshly rebuilt container on Hugging Face)
+          // But localStorage has the user's chapters!
+          if (typeof window !== "undefined") {
+            const cached = localStorage.getItem("mangaid_user_history");
+            if (cached) {
+              const localChapters: SavedChapter[] = JSON.parse(cached);
+              if (localChapters.length > 0) {
+                // Auto-sync back to the backend SQLite database so backend has them too!
+                apiFetch(`${BACKEND_URL}/api/chapters/sync`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ chapters: localChapters }),
+                }).catch((e) => console.warn("Auto-restore history error:", e));
+              }
+            }
+          }
+        }
       }
     } catch (err) {
       console.error("Fetch saved chapters error:", err);
+    }
+  };
+
+  const handleExportHistory = () => {
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(savedChapters, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `mangaid_history_${new Date().toISOString().slice(0, 10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (e) {
+      alert("Gagal mengunduh backup riwayat.");
+    }
+  };
+
+  const handleImportHistory = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const chapters: SavedChapter[] = JSON.parse(text);
+      if (!Array.isArray(chapters) || chapters.length === 0) {
+        throw new Error("File backup tidak valid atau kosong.");
+      }
+      setSavedChapters(chapters);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("mangaid_user_history", JSON.stringify(chapters));
+      }
+      // Sync to backend SQLite
+      await apiFetch(`${BACKEND_URL}/api/chapters/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chapters }),
+      });
+      alert(`Berhasil memulihkan ${chapters.length} bab ke riwayat!`);
+    } catch (err: any) {
+      alert(`Gagal memulihkan riwayat: ${err.message || err}`);
+    } finally {
+      e.target.value = "";
     }
   };
 
@@ -880,17 +1029,40 @@ export default function MangaIDApp() {
   const fetchChapter = async (cId: string) => {
     try {
       const resp = await apiFetch(`${BACKEND_URL}/api/chapters/${cId}`);
-      if (!resp.ok) return;
-      const data: ChapterData = await resp.json();
-      setChapterData(data);
-      setSinglePageIdx(0);
-      setView("reader");
-      if (typeof window !== "undefined") {
-        window.history.pushState({}, "", `?chapter=${cId}`);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+      if (resp.ok) {
+        const data: ChapterData = await resp.json();
+        setChapterData(data);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`mangaid_detail_${cId}`, JSON.stringify(data));
+        }
+        setSinglePageIdx(0);
+        setView("reader");
+        if (typeof window !== "undefined") {
+          window.history.pushState({}, "", `?chapter=${cId}`);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+        return;
       }
     } catch (err) {
       console.error("Fetch chapter error:", err);
+    }
+
+    // Fallback to local storage detail cache if backend container was restarted/empty
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem(`mangaid_detail_${cId}`);
+        if (cached) {
+          const cachedData: ChapterData = JSON.parse(cached);
+          setChapterData(cachedData);
+          setSinglePageIdx(0);
+          setView("reader");
+          window.history.pushState({}, "", `?chapter=${cId}`);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+      } catch (e) {
+        console.warn("Failed loading cached chapter detail:", e);
+      }
     }
   };
 
@@ -1259,6 +1431,14 @@ export default function MangaIDApp() {
     });
     return list;
   }, [explorerChapters, explorerChapterSearch, explorerSortOrder]);
+
+  // Visible genres filtered by user's search text
+  const visibleGenres = useMemo(() => {
+    const list = SOURCE_GENRES[explorerSource] || [];
+    if (!genreSearchInput.trim()) return list;
+    const q = genreSearchInput.toLowerCase().trim();
+    return list.filter((g) => g.toLowerCase().includes(q));
+  }, [explorerSource, genreSearchInput]);
 
   // Explorer filtered results by selected genres
   const filteredExplorerResults = useMemo(() => {
@@ -2203,20 +2383,32 @@ export default function MangaIDApp() {
                       </button>
                     </form>
 
-                    {/* Multi-Select Genre Filter Bar */}
-                    <div className="pt-1 pb-1">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-1.5 text-xs font-mono text-[#8E8B84]">
-                          <Filter className="w-3.5 h-3.5 text-[#E8452C]" />
-                          <span>
-                            Filter {explorerSource === "nhentai" ? "Tag nhentai" : explorerSource === "komikindo" ? "Genre Komik Indo" : explorerSource === "raw" ? "Genre RAW Manga" : "Genre MangaDex"} (Multi-Pilih):
-                          </span>
+                    {/* Multi-Select Genre Filter Bar with Real-Time Typing Search */}
+                    <div className="pt-1 pb-1 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setShowGenreSearch((prev) => !prev)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#161617] border border-[#2A2A2C] hover:border-[#E8452C] text-[#ECE9E2] text-xs font-mono transition-colors cursor-pointer group"
+                            title="Klik untuk membuka pencarian genre"
+                          >
+                            <Filter className="w-3.5 h-3.5 text-[#E8452C] group-hover:scale-110 transition-transform" />
+                            <span className="font-semibold">
+                              Filter {explorerSource === "nhentai" ? "Tag nhentai" : explorerSource === "komikindo" ? "Genre Komik Indo" : explorerSource === "raw" ? "Genre RAW" : "Genre MangaDex"}
+                            </span>
+                            <span className="text-[10px] text-[#8E8B84]">
+                              ({(SOURCE_GENRES[explorerSource] || []).length} tag)
+                            </span>
+                          </button>
+
                           {selectedGenres.length > 0 && (
-                            <span className="px-1.5 py-0.2 rounded bg-[#E8452C] text-white text-[10px] font-bold">
+                            <span className="px-1.5 py-0.5 rounded bg-[#E8452C] text-white text-[10px] font-bold">
                               {selectedGenres.length} dipilih
                             </span>
                           )}
                         </div>
+
                         <div className="flex items-center gap-2">
                           {selectedGenres.length > 0 && (
                             <>
@@ -2233,14 +2425,73 @@ export default function MangaIDApp() {
                                 onClick={() => setSelectedGenres([])}
                                 className="text-[11px] font-mono text-[#8E8B84] hover:text-[#E8452C] cursor-pointer"
                               >
-                                Reset
+                                Reset Genre
                               </button>
                             </>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                        {(SOURCE_GENRES[explorerSource] || []).map((genre) => {
+
+                      {/* Search & Filter Input for the massive genre list */}
+                      <div className="relative flex items-center">
+                        <Search className="w-3.5 h-3.5 text-[#8E8B84] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder={`Ketik nama genre / tag untuk mencari di antara ${(SOURCE_GENRES[explorerSource] || []).length} genre (contoh: Isekai, Milf, Wuxia, Action)...`}
+                          value={genreSearchInput}
+                          onChange={(e) => setGenreSearchInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const q = genreSearchInput.trim().toLowerCase();
+                              if (!q) return;
+                              const match = (SOURCE_GENRES[explorerSource] || []).find((g) => g.toLowerCase() === q)
+                                || (SOURCE_GENRES[explorerSource] || []).find((g) => g.toLowerCase().includes(q));
+                              const tagToAdd = match || genreSearchInput.trim();
+                              if (tagToAdd && !selectedGenres.includes(tagToAdd)) {
+                                toggleGenre(tagToAdd);
+                              }
+                              setGenreSearchInput("");
+                            }
+                          }}
+                          className="w-full pl-9 pr-8 py-2 rounded-[6px] bg-[#0D0D0E] border border-[#2A2A2C] focus:border-[#E8452C] text-xs text-[#ECE9E2] placeholder-[#8E8B84]/60 outline-none transition-colors"
+                        />
+                        {genreSearchInput && (
+                          <button
+                            type="button"
+                            onClick={() => setGenreSearchInput("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8E8B84] hover:text-[#ECE9E2] cursor-pointer p-0.5"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Selected Genres Badges (Pinned at top when selected) */}
+                      {selectedGenres.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap p-2 rounded-[6px] bg-[#161617]/70 border border-[#2A2A2C]">
+                          <span className="text-[10px] font-mono text-[#8E8B84] mr-1">Filter Aktif:</span>
+                          {selectedGenres.map((g) => (
+                            <span
+                              key={g}
+                              className="px-2 py-0.5 rounded-full bg-[#E8452C] text-white text-[11px] font-semibold flex items-center gap-1 shadow-sm"
+                            >
+                              <span>{g}</span>
+                              <button
+                                type="button"
+                                onClick={() => toggleGenre(g)}
+                                className="hover:text-black/80 cursor-pointer"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Genre List Pills with wrap & scroll */}
+                      <div className="flex items-center gap-1.5 max-h-36 overflow-y-auto flex-wrap pb-1 pr-1 scrollbar-thin">
+                        {visibleGenres.map((genre) => {
                           const isSelected = selectedGenres.includes(genre);
                           return (
                             <button
@@ -2258,6 +2509,20 @@ export default function MangaIDApp() {
                             </button>
                           );
                         })}
+
+                        {/* Add custom tag button if not matched */}
+                        {genreSearchInput.trim() && !visibleGenres.some((g) => g.toLowerCase() === genreSearchInput.trim().toLowerCase()) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              toggleGenre(genreSearchInput.trim());
+                              setGenreSearchInput("");
+                            }}
+                            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#E8452C]/20 border border-[#E8452C] text-[#ECE9E2] hover:bg-[#E8452C] hover:text-white transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>+ Tambah Tag "{genreSearchInput.trim()}"</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -2408,8 +2673,8 @@ export default function MangaIDApp() {
                     </span>
                   </div>
 
-                  {/* Search and Dropdown Filter */}
-                  <div className="flex items-center gap-2">
+                  {/* Search, Backup, Import and Dropdown Filter */}
+                  <div className="flex items-center gap-2 flex-wrap">
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 text-[#8E8B84] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.5} />
                       <input
@@ -2417,7 +2682,7 @@ export default function MangaIDApp() {
                         placeholder="Cari judul seri manga..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#151516] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60 w-48 sm:w-60 transition-colors"
+                        className="pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#151516] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60 w-36 sm:w-48 transition-colors"
                       />
                       {searchQuery && (
                         <button
@@ -2437,6 +2702,32 @@ export default function MangaIDApp() {
                       <option value="all">Semua</option>
                       <option value="done">Selesai</option>
                     </select>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleExportHistory}
+                        title="Unduh backup riwayat & database komik Anda (JSON)"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-[6px] bg-[#1C1C1E] border border-[#2A2A2C] hover:border-[#8E8B84] text-[#ECE9E2] text-xs font-mono transition-colors cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5 text-[#8E8B84]" />
+                        <span className="hidden sm:inline">Backup</span>
+                      </button>
+
+                      <label
+                        title="Pulihkan database riwayat komik dari file backup JSON"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-[6px] bg-[#1C1C1E] border border-[#2A2A2C] hover:border-[#E8452C] text-[#ECE9E2] text-xs font-mono transition-colors cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-[#E8452C]" />
+                        <span className="hidden sm:inline">Pulihkan</span>
+                        <input
+                          type="file"
+                          accept=".json"
+                          onChange={handleImportHistory}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
                   </div>
                 </div>
 

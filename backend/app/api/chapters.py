@@ -46,6 +46,50 @@ class ChapterDetailResponse(BaseModel):
     language_source: str
     pages: List[PageItemResponse]
 
+class SyncChapterItem(BaseModel):
+    id: str
+    title: Optional[str] = None
+    chapter_number: Optional[str] = None
+    language_source: Optional[str] = "id"
+    total_pages: Optional[int] = 0
+    rendered_pages: Optional[int] = 0
+    created_at: Optional[str] = None
+    pages: Optional[List[str]] = None
+
+class SyncChaptersRequest(BaseModel):
+    chapters: List[SyncChapterItem]
+
+@router.post("/sync")
+def sync_chapters(payload: SyncChaptersRequest, request: Request, db: Session = Depends(get_db)):
+    device_id = request.headers.get("x-device-id") or "default"
+    restored = 0
+    for ch_item in payload.chapters:
+        existing = db.query(Chapter).filter(Chapter.id == ch_item.id).first()
+        if not existing:
+            new_chapter = Chapter(
+                id=ch_item.id,
+                title=ch_item.title or "Untitled Manga",
+                chapter_number=ch_item.chapter_number or "1",
+                language_source=ch_item.language_source or "id",
+                device_id=device_id
+            )
+            db.add(new_chapter)
+
+            if ch_item.pages:
+                for idx, p_url in enumerate(ch_item.pages, start=1):
+                    rec = PageRecord(
+                        id=str(uuid.uuid4()),
+                        chapter_id=ch_item.id,
+                        page_number=idx,
+                        original_path=p_url,
+                        translated_path=p_url,
+                        status="rendered"
+                    )
+                    db.add(rec)
+            restored += 1
+    db.commit()
+    return {"status": "ok", "restored": restored}
+
 @router.post("/direct-read", response_model=ChapterDetailResponse)
 def create_direct_read(payload: DirectReadRequest, request: Request, db: Session = Depends(get_db)):
     if not payload.pages:

@@ -6,13 +6,15 @@ from ..core.config import settings
 # Ensure data directory exists
 settings.data_path
 
+db_url = settings.effective_database_url
+
 # SQLite connect args and pool configuration
-is_sqlite = "sqlite" in settings.DATABASE_URL
+is_sqlite = "sqlite" in db_url
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 pool_kwargs = {"poolclass": NullPool} if is_sqlite else {}
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     connect_args=connect_args,
     **pool_kwargs,
     echo=False

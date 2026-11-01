@@ -48,6 +48,15 @@ class Settings(BaseSettings):
         return keys
 
     @property
+    def effective_database_url(self) -> str:
+        env_db = os.environ.get("DATABASE_URL")
+        if env_db:
+            return env_db
+        if os.path.exists("/data") and os.access("/data", os.W_OK):
+            return "sqlite:////data/mangaid.db"
+        return self.DATABASE_URL
+
+    @property
     def primary_gemini_api_key(self) -> str:
         keys = self.gemini_api_keys
         return keys[0] if keys else ""

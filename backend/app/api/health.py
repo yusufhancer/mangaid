@@ -4,15 +4,15 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.4.1",
+    "version": "1.4.2",
     "release_date": "1 November 2026",
-    "title": "MangaID Universal - Source-Specific Genres & Interconnected Tag Explorer",
+    "title": "MangaID Truly Universal - Exhaustive Source Genres, Real-time Genre Search & Persistent User History",
     "changelog": [
-        "Filter Genre Khusus Tiap Sumber: Genre/tag menyesuaikan web masing-masing (MangaDex, RAW Manga, Komik Indo, dan nhentai 18+) tanpa bercampur",
-        "Pencarian Berdasarkan Genre Saja: Bisa mencari komik hanya dengan memilih genre tanpa wajib mengetik teks",
-        "Interkoneksi Genre & Detail Manga: Seluruh tag komik ditampilkan lengkap (tanpa terpotong) dan tiap tag bisa langsung diklik untuk mencari komik serupa",
-        "Auto Scrape Full Tags nhentai: Menampilkan seluruh 20+ tag doujinshi asli secara lengkap dan dinamis",
-        "Dukungan RAW Manga, Opsi Baca Langsung & Riwayat Otomatis"
+        "100% Genre Asli dari Tiap Web: 77 tag resmi MangaDex, 80+ tag RAW, 86 tag resmi KomikIndo (dari daftar-manga), dan 120+ tag konten asli nhentai",
+        "Pencarian Genre Interaktif Real-Time: Klik logo Filter atau ketik nama genre untuk memfilter ratusan tag seketika, tekan Enter atau tambah tag kustom",
+        "Perlindungan Database & Riwayat Permanen: Dual-layer persistence (localStorage + SQLite auto-sync) menjaga riwayat komik agar tidak pernah hilang saat aplikasi di-update",
+        "Fitur Backup & Pulihkan Riwayat: Tombol unduh backup JSON dan pulihkan riwayat langsung di halaman koleksi",
+        "Pencarian Berdasarkan Genre Tanpa Wajib Judul & Interkoneksi Tag Lengkap"
     ]
 }
 
