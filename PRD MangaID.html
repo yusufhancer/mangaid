@@ -1,0 +1,409 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}</style><style>:root{color-scheme:light dark;--md-bg:#fff;--md-text:rgba(0,0,0,.8);--md-muted:rgba(0,0,0,.6);--md-fill:rgba(0,0,0,.04);--md-fill-strong:rgba(0,0,0,.06);--md-rule:rgba(0,0,0,.1);--md-rule-strong:rgba(0,0,0,.16);--md-link:hsl(210 100% 45%)}@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){--md-bg:#0d0d0d;--md-text:rgba(255,255,255,.85);--md-muted:rgba(255,255,255,.6);--md-fill:rgba(255,255,255,.06);--md-fill-strong:rgba(255,255,255,.09);--md-rule:rgba(255,255,255,.14);--md-rule-strong:rgba(255,255,255,.22);--md-link:hsl(210 100% 72%)}}:root[data-theme="dark"]{color-scheme:dark;--md-bg:#0d0d0d;--md-text:rgba(255,255,255,.85);--md-muted:rgba(255,255,255,.6);--md-fill:rgba(255,255,255,.06);--md-fill-strong:rgba(255,255,255,.09);--md-rule:rgba(255,255,255,.14);--md-rule-strong:rgba(255,255,255,.22);--md-link:hsl(210 100% 72%)}:root[data-theme="light"]{color-scheme:light}@media print{:root,:root[data-theme="dark"]{color-scheme:light;--md-bg:#fff;--md-text:rgba(0,0,0,.8);--md-muted:rgba(0,0,0,.6);--md-fill:rgba(0,0,0,.04);--md-fill-strong:rgba(0,0,0,.06);--md-rule:rgba(0,0,0,.1);--md-rule-strong:rgba(0,0,0,.16);--md-link:hsl(210 100% 45%)}}body{background:var(--md-bg);color:var(--md-text);max-width:720px;margin:0 auto;padding:32px;display:flex;flex-direction:column;gap:10px;font:14px/1.55 -apple-system,BlinkMacSystemFont,'SF Pro','Segoe UI',sans-serif;overflow-wrap:break-word}body>:first-child{margin-top:0}h1,h2,h3,h4,h5,h6{margin:6px 0 0;line-height:1.25;font-weight:600;text-wrap:balance}h1{font-size:1.35em}h2{font-size:1.15em;color:var(--md-muted)}h3,h4,h5,h6{font-size:1em}p,ul,ol,blockquote,table,pre,hr{margin:0}strong{font-weight:600}a{color:var(--md-link);text-decoration:none}a:hover{text-decoration:underline}ul,ol{display:flex;flex-direction:column;gap:6px;padding-left:22px}ul{list-style:disc}ol{list-style:decimal}:is(li,td,th)>*+:is(p,ul,ol,blockquote){margin-top:6px}blockquote{display:flex;flex-direction:column;gap:10px;border-left:2px solid var(--md-rule);padding-left:10px;color:var(--md-muted)}:not(pre)>code{background:var(--md-fill);padding:1px 3px;border-radius:4px;font:.92em 'SF Mono',ui-monospace,Menlo,Consolas,monospace}a>code{background:none;color:inherit}pre{background:var(--md-fill);padding:10px 12px;border-radius:6px;overflow-x:auto;font:12px/1.5 'SF Mono',ui-monospace,Menlo,Consolas,monospace;margin-block:4px}pre code{background:none;padding:0;font:inherit}table{width:100%;border-collapse:separate;border-spacing:2px;font:inherit}th,td{padding:6px 8px;border-radius:3px;text-align:left;vertical-align:top}th{background:var(--md-fill-strong);font-weight:600}td{background:var(--md-fill)}:is(th,td) :not(pre)>code{background:transparent}hr{border:0;border-top:1px solid var(--md-rule-strong);margin-block:10px}img{max-width:100%;height:auto;border-radius:4px}</style>
+</head><body>
+<h1>PRD: MangaID — Universal AI Manga/Manhwa/Manhua Translator (Any Language → Indonesian)</h1>
+<h2>0. Instructions for the AI Agent (READ FIRST)</h2>
+<p>You are the lead engineer of <strong>MangaID</strong>. This document is the single source of truth. Follow these rules throughout:</p>
+<ol>
+<li><strong>Plan before code.</strong> Produce an Implementation Plan for each phase and wait for my approval before executing.</li>
+<li><strong>One phase at a time.</strong> Do not begin Phase N+1 until Phase N meets its acceptance criteria and I confirm.</li>
+<li><strong>No scope creep.</strong> Anything not in this PRD must be proposed and approved first.</li>
+<li><strong>Free tools only.</strong> Every library, service, and tool must be free/open-source with no paid tier required (see Section 6). If you believe a paid tool is necessary, stop and ask.</li>
+<li><strong>Verify against official documentation.</strong> Before using the Gemini API, check current Google AI docs for model IDs, SDK usage, structured-output syntax, free-tier limits, and rate limits. Do not rely on memory.</li>
+<li><strong>Universality is a core requirement.</strong> The system must never be hard-coded to a single website (see Section 4, FR-1).</li>
+<li><strong>Secrets</strong> live only in <code>.env</code> (never committed). Provide <code>.env.example</code>.</li>
+<li>Write tests for each backend module, keep code typed and modular, and provide a README with run instructions per phase.</li>
+</ol>
+<hr>
+<h2>1. Project Description</h2>
+<p><strong>MangaID</strong> is a self-hosted web application that translates any online manga, manhwa, or manhua chapter into natural Indonesian.</p>
+<p>The user pastes a chapter link from <strong>any website</strong> (MangaDex, a scanlation site, a webtoon-style reader, etc.). The system detects and collects the chapter's page images, uses Google Gemini (multimodal) to read the original text, translates the whole chapter with consistent character names and tone, removes the original text from the artwork, and typesets the Indonesian translation inside the speech bubbles. The finished chapter is presented in a clean, MangaDex-style reader where the user can read it directly in the browser or download it as a PDF.</p>
+<h3>1.1 Problem Statement</h3>
+<ul>
+<li>Many titles have no Indonesian translation.</li>
+<li>Existing workflows are manual and fragmented (download images → OCR → translate → clean → typeset), requiring technical skill and hours of work per chapter.</li>
+<li>Existing translation tools are usually tied to specific sources or require local GPU-heavy setups.</li>
+</ul>
+<h3>1.2 Solution Summary</h3>
+<p>A single-input workflow — <strong>paste link → review detected pages → translate → read/download</strong> — powered entirely by Gemini for all AI tasks (text detection, OCR, language detection, translation), combined with free open-source image-processing libraries for cleaning and typesetting.</p>
+<h3>1.3 Goals</h3>
+<ul>
+<li>G1: Works with <strong>any</strong> public chapter URL through a layered, source-agnostic ingestion strategy.</li>
+<li>G2: Natural, casual, context-consistent Indonesian translation (names, terms, tone).</li>
+<li>G3: Automatic source-language detection (Japanese, Korean, Chinese, English, others).</li>
+<li>G4: MangaDex-quality reading experience, mobile-first.</li>
+<li>G5: PDF export of translated chapters.</li>
+<li>G6: Operates within free-tier constraints (free tools, Gemini API free quota).</li>
+</ul>
+<h3>1.4 Non-Goals (v1)</h3>
+<ul>
+<li>User accounts, payments, comments, or social features.</li>
+<li>Public hosting or distribution of translated content.</li>
+<li>Bypassing logins, paywalls, DRM, CAPTCHAs, or anti-bot protections.</li>
+<li>Perfect handling of stylized SFX or artistic lettering (best effort).</li>
+<li>Native mobile apps.</li>
+<li>Online hosting/deployment: v1 is <strong>local-only</strong> (runs on the owner's machine).</li>
+</ul>
+<h3>1.5 Target User</h3>
+<p>Indonesian readers who want to read titles unavailable in Indonesian, for <strong>personal, non-commercial use</strong>.</p>
+<hr>
+<h2>2. User Stories</h2>
+<ul>
+<li>U1: I paste any chapter URL and click &quot;Analisis Halaman&quot;.</li>
+<li>U2: I see thumbnails of the detected pages, and can remove, reorder, or add pages before translating.</li>
+<li>U3: I click &quot;Terjemahkan&quot; and watch real-time progress (stage and page X of Y).</li>
+<li>U4: I read the translated chapter in vertical-scroll mode.</li>
+<li>U5: I toggle between Original and Translated.</li>
+<li>U6: I download the translated chapter as a PDF.</li>
+<li>U7: If a link cannot be processed automatically, I can upload images, a ZIP/CBZ, or a PDF instead.</li>
+<li>U8: I retry only failed pages instead of re-running the whole chapter.</li>
+<li>U9: I choose tone (gaul by default, aku/kamu, or neutral), honorific handling, and SFX handling.</li>
+</ul>
+<hr>
+<h2>3. System Overview (Pipeline)</h2>
+<pre><code>URL / Upload
+   │
+   ▼
+[1] Source Ingestion (layered, universal) ──► page images + metadata
+   │
+   ▼
+[2] Page Review (user confirms/reorders pages)
+   │
+   ▼
+[3] Gemini Vision Analysis (per page): text regions + bbox + source text + type
+   │
+   ▼
+[4] Gemini Chapter Translation (whole chapter, glossary-aware) → Indonesian
+   │
+   ▼
+[5] Rendering: erase original text + typeset Indonesian (Pillow/OpenCV)
+   │
+   ▼
+[6] Reader (web) + PDF export
+</code></pre>
+<hr>
+<h2>4. Functional Requirements</h2>
+<h3>FR-1 Universal Source Ingestion (CORE REQUIREMENT)</h3>
+<p>The system must accept an arbitrary URL and attempt to obtain the ordered list of chapter page images using a <strong>layered strategy</strong>. Each layer is tried in order; the pipeline moves to the next layer only if the previous layer fails or yields low confidence.</p>
+<p>Define a <code>SourceAdapter</code> interface:</p>
+<pre><code>can_handle(url) -&gt; bool
+fetch_chapter(url) -&gt; ChapterData(title, chapter_number, language_hint, page_image_urls, headers_needed)
+</code></pre>
+<p><strong>Layer 0 — Known-site adapters (optional optimization).</strong>
+Dedicated adapters for sites with official/clean APIs (initially MangaDex via its official public API). Adapters are plugins; adding one must not require changes to core code. This layer is an optimization only — the system must remain fully functional without it.</p>
+<p><strong>Layer 1 — Generic static extraction.</strong>
+Fetch HTML with <code>httpx</code> (browser-like headers, polite <code>User-Agent</code>, timeouts, redirects) and parse with BeautifulSoup/lxml:</p>
+<ul>
+<li>Collect candidate images from <code>&lt;img src&gt;</code>, <code>data-src</code>, <code>data-lazy-src</code>, <code>data-original</code>, <code>srcset</code>, <code>&lt;noscript&gt;</code> fallbacks, <code>&lt;picture&gt;</code>, and image URLs embedded in inline JSON/script tags.</li>
+<li>Resolve relative URLs; send correct <code>Referer</code>/<code>Origin</code> headers when downloading images (hotlink protection).</li>
+<li>Score and filter candidates: discard logos, avatars, ads, icons, and thumbnails using size (probe via HEAD or partial download), aspect ratio, DOM container (largest repeated sibling group), URL patterns (sequential numbering like <code>001.jpg</code>, <code>p1.webp</code>), and position in the DOM.</li>
+<li>Order pages by DOM order and numeric filename patterns; detect and report duplicates.</li>
+</ul>
+<p><strong>Layer 2 — Headless browser rendering (for JavaScript-rendered/lazy-loaded readers).</strong>
+Use <strong>Playwright (Chromium)</strong> in headless mode to load the page, auto-scroll to trigger lazy loading, wait for network idle, and capture both the rendered DOM and image network responses. Apply the same scoring/filtering logic as Layer 1. Respect timeouts and limit resource use (block fonts/ads/trackers to save bandwidth).</p>
+<p><strong>Layer 3 — Gemini-assisted extraction (ambiguity resolver).</strong>
+When heuristics return ambiguous or low-confidence results, send a trimmed list of candidate image URLs with their context (DOM path, dimensions, alt text, position) — and optionally a few thumbnails — to Gemini and ask it to select which images are the chapter's pages and in what order. Output must be validated structured JSON.</p>
+<p><strong>Layer 4 — Manual fallback.</strong>
+If the above fail (login-required pages, protected readers, unsupported formats), the UI offers: multi-image upload, ZIP/CBZ upload, PDF upload (render pages to images), or pasting a list of direct image URLs. This guarantees the product works for every source.</p>
+<p><strong>Cross-cutting requirements for FR-1:</strong></p>
+<ul>
+<li><strong>Page Review step is mandatory</strong> before any AI call: show detected pages as thumbnails with a confidence indicator; allow delete, reorder, and add. This prevents wasting free-tier quota on wrong images.</li>
+<li>Report which layer succeeded (useful for debugging and future adapter creation).</li>
+<li><strong>SSRF protection:</strong> only <code>http</code>/<code>https</code>; resolve DNS and block private, loopback, link-local, and metadata IP ranges; limit redirects, response size, and download time.</li>
+<li>Do <strong>not</strong> attempt to bypass logins, paywalls, DRM, CAPTCHAs, or other access controls. If detected, stop and offer the manual fallback with a clear message.</li>
+<li>Throttle requests per host, retry with exponential backoff, and cache downloaded pages.</li>
+<li>Extract metadata (manga title, chapter number) when available from page title, <code>og:</code> tags, JSON-LD, or Gemini inference; the user can edit it.</li>
+</ul>
+<h3>FR-2 AI Page Analysis (Gemini Vision)</h3>
+<p>For each page, call Gemini with the image and request <strong>structured JSON output</strong> (use the API's response-schema feature). For every text region return:</p>
+<pre><code class="language-json">{
+  &#34;page_language&#34;: &#34;ja&#34;,
+  &#34;regions&#34;: [
+    {
+      &#34;id&#34;: 1,
+      &#34;type&#34;: &#34;dialogue | narration | thought | sfx | sign | other&#34;,
+      &#34;bbox&#34;: [ymin, xmin, ymax, xmax],
+      &#34;source_text&#34;: &#34;original text exactly as written&#34;,
+      &#34;speaker&#34;: &#34;character name or null&#34;,
+      &#34;reading_order&#34;: 1,
+      &#34;is_vertical_text&#34;: true
+    }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>bbox</code> uses Gemini's normalized 0–1000 convention; the backend converts to pixels.</li>
+<li>Reading order follows the source convention (right-to-left for Japanese manga, left-to-right for manhwa/manhua/webtoon strips).</li>
+<li>Very tall webtoon strips must be <strong>split into overlapping slices</strong> before analysis and re-merged afterwards (deduplicate regions in overlap zones).</li>
+<li>Validate against a schema; retry up to 2 times on invalid output; otherwise mark the page as failed.</li>
+</ul>
+<h3>FR-3 Chapter-Level Translation (Context-Aware)</h3>
+<ul>
+<li>After all pages are analyzed, send the whole chapter's regions to Gemini (chunked if necessary) so translation is consistent.</li>
+<li>Build and persist a <strong>chapter glossary</strong> (character names, terms, places, honorific decisions) and include it in subsequent requests.</li>
+<li>Output per region: <code>id_text</code> (Indonesian) and optional <code>note</code>.</li>
+<li>Style rules (system instruction):
+<ul>
+<li>Natural, conversational Indonesian, not word-for-word; match each character's personality.</li>
+<li><strong>Default tone preset = &quot;gaul&quot;</strong>: modern, casual Indonesian slang as used in everyday chat (e.g., &quot;nggak&quot;, &quot;banget&quot;, &quot;sih&quot;, &quot;dong&quot;, &quot;kok&quot;, &quot;udah&quot;, &quot;gimana&quot;), so dialogue never reads stiff or textbook-like. Choose pronouns per character (gue/lo or aku/kamu) based on personality, age, and relationship, and keep them consistent for the whole chapter. Formal, elderly, or noble characters may use more polite speech, and narration stays neutral and readable. Do not force slang where it does not fit, and do not add vulgarity that is absent from the source.</li>
+<li>Other presets selectable by user setting: aku/kamu casual, neutral/formal.</li>
+<li>Do not translate proper nouns; keep common romanization.</li>
+<li>Honorifics (-san, -kun, -senpai, oppa, etc.): keep or drop by setting.</li>
+<li>Keep text concise enough to fit speech bubbles.</li>
+<li>No censorship, no additions, no commentary inside translated text.</li>
+<li>Preserve punctuation intent (ellipses, &quot;?!&quot;).</li>
+</ul>
+</li>
+</ul>
+<h3>FR-4 Rendering Translated Pages</h3>
+<p><strong>Default mode (<code>RENDER_MODE=overlay</code>):</strong></p>
+<ol>
+<li>Build padded masks from <code>bbox</code> regions.</li>
+<li>Erase original text: sample background color for flat/white bubbles; use OpenCV inpainting for complex backgrounds.</li>
+<li>Typeset Indonesian text with Pillow: centered, auto-wrapped, auto-shrinking to fit, open-license comic font (verify license; bundle in repo), black text with optional white stroke over artwork.</li>
+<li>Save to <code>data/{chapter_id}/translated/{page}.png</code>, preserving the original dimensions.</li>
+</ol>
+<p><strong>Experimental mode (<code>RENDER_MODE=gemini_image</code>, opt-in):</strong>
+Send the page and the (original → Indonesian) replacement list to a Gemini image-editing-capable model with strict instructions to change only the text. Because this may alter artwork or may be unavailable on the free tier, it must include a safeguard: if output dimensions differ or pixel changes outside text regions exceed a threshold, automatically fall back to overlay mode.</p>
+<h3>FR-5 Background Jobs &amp; Progress</h3>
+<ul>
+<li><code>POST /api/jobs</code> returns <code>job_id</code> immediately; work runs in the background.</li>
+<li>Stages: <code>ingesting → awaiting_review → analyzing → translating → rendering → done | failed</code>.</li>
+<li>Progress via polling or Server-Sent Events (stage, pages done/total, per-page status).</li>
+<li>Concurrency limit configurable (default conservative, e.g., 2) and a <strong>rate-limiter/queue aware of Gemini free-tier limits (requests per minute / per day / tokens)</strong>; handle HTTP 429 with exponential backoff and resume.</li>
+<li>A single page failure never fails the whole job; support per-page retry.</li>
+<li>Cache results by (source + settings) hash.</li>
+</ul>
+<h3>FR-6 Web Reader</h3>
+<ul>
+<li>Vertical continuous-scroll, fit-to-width, lazy-loaded images.</li>
+<li>Original/Translated toggle (chapter-wide and per page).</li>
+<li>Header shows title, chapter, detected language.</li>
+<li>Mobile-first, swipe/scroll friendly, keyboard shortcuts on desktop, dark mode default.</li>
+</ul>
+<h3>FR-7 PDF Export</h3>
+<ul>
+<li>&quot;Download PDF&quot; merges translated pages in order using <code>img2pdf</code>.</li>
+<li>Filename: <code>{manga_title}_ch{number}_ID.pdf</code>. Generated on demand.</li>
+</ul>
+<h3>FR-8 Settings (per job)</h3>
+<p>Tone (gaul [default], aku/kamu, neutral), honorifics (keep/drop), SFX (skip/translate), render mode (overlay/gemini_image), Gemini model (default from <code>.env</code>), image quality for AI input (original/downscaled to save quota).</p>
+<hr>
+<h2>5. UX Requirements</h2>
+<ul>
+<li><strong>Home:</strong> centered URL input, secondary &quot;Upload manual&quot; option, settings drawer, recent chapters.</li>
+<li><strong>Review screen:</strong> thumbnail grid with drag-to-reorder, delete, add; detected source layer and confidence badge.</li>
+<li><strong>Progress screen:</strong> stage tracker, page counter, thumbnails filling in as pages finish.</li>
+<li><strong>Reader:</strong> minimal chrome, sticky top bar (title, toggle, download).</li>
+<li><strong>Design:</strong> clean, modern, dark theme, Tailwind CSS, accessible contrast, UI text in Indonesian.</li>
+<li><strong>Errors:</strong> human-readable Indonesian messages for invalid URL, blocked/protected source (with manual fallback CTA), quota exceeded, and partial failures.</li>
+</ul>
+<hr>
+<h2>6. Technical Architecture &amp; Free-Tools Constraint</h2>
+<p>All components below are free/open-source. No paid service may be introduced.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Choice (free)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend</td>
+<td>Next.js (App Router, TypeScript) + Tailwind CSS</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>Python 3.11+, FastAPI, Uvicorn</td>
+</tr>
+<tr>
+<td>AI</td>
+<td>Google Gemini API via official Python SDK, using the <strong>free-tier API key from Google AI Studio</strong></td>
+</tr>
+<tr>
+<td>HTTP / parsing</td>
+<td>httpx, BeautifulSoup4, lxml</td>
+</tr>
+<tr>
+<td>Headless browser</td>
+<td>Playwright (Chromium)</td>
+</tr>
+<tr>
+<td>Image processing</td>
+<td>Pillow, OpenCV (headless), NumPy</td>
+</tr>
+<tr>
+<td>Archives / PDF input</td>
+<td>zipfile / rarfile-free CBZ handling, pypdfium2 or PyMuPDF (verify license suitability)</td>
+</tr>
+<tr>
+<td>PDF output</td>
+<td>img2pdf</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>SQLite via SQLAlchemy</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>Local filesystem <code>data/{chapter_id}/{original,translated}/</code></td>
+</tr>
+<tr>
+<td>Jobs</td>
+<td>asyncio / FastAPI BackgroundTasks (interface designed so Celery + Redis can replace it later)</td>
+</tr>
+<tr>
+<td>Packaging</td>
+<td>Optional Docker Compose (free)</td>
+</tr>
+</tbody>
+</table>
+<h3>6.1 Gemini Configuration</h3>
+<ul>
+<li>The owner uses a Gemini Pro account and the <strong>Flash-tier model (referred to by the owner as &quot;3.8 Flash&quot;)</strong>. Do not hard-code a model ID. Read it from <code>.env</code> (<code>GEMINI_MODEL_VISION</code>, <code>GEMINI_MODEL_TEXT</code>, <code>GEMINI_MODEL_IMAGE</code>), and on startup call the SDK's model-listing function to verify the configured ID exists; if not, log a clear error listing available Flash models.</li>
+<li>Note: a consumer Gemini subscription and the developer API are separate. The app authenticates with an <strong>API key</strong> (<code>GEMINI_API_KEY</code>). Plan around the free API quota: expose configured limits in <code>.env</code> (<code>GEMINI_RPM</code>, <code>GEMINI_RPD</code>) and enforce them.</li>
+<li>Quota-saving measures: downscale images sent to Gemini (originals kept for rendering), skip SFX analysis when configured, batch chapter translation into few requests, cache all AI outputs, and track token usage per job.</li>
+</ul>
+<h3>6.2 Suggested Folder Structure</h3>
+<pre><code>mangaid/
+├─ PRD.md
+├─ backend/
+│  ├─ app/
+│  │  ├─ main.py
+│  │  ├─ api/            # jobs, chapters, uploads, export
+│  │  ├─ ingestion/      # base.py, pipeline.py (layer orchestrator),
+│  │  │                  # static_extractor.py, headless_extractor.py,
+│  │  │                  # ai_extractor.py, upload_handler.py, scoring.py,
+│  │  │                  # security.py (SSRF guard), adapters/mangadex.py
+│  │  ├─ ai/             # gemini_client.py, analyze.py, translate.py, prompts/
+│  │  ├─ render/         # mask.py, inpaint.py, typeset.py, gemini_image.py
+│  │  ├─ jobs/           # runner.py, rate_limiter.py
+│  │  ├─ db/             # models.py, session.py
+│  │  └─ core/           # config.py, logging.py
+│  ├─ tests/
+│  └─ requirements.txt
+├─ frontend/
+├─ data/                 # gitignored
+├─ .env.example
+└─ README.md
+</code></pre>
+<h3>6.3 API Endpoints</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/ingest</code></td>
+<td>Body <code>{url}</code> → detected pages, metadata, layer used, confidence</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/ingest/upload</code></td>
+<td>Manual upload (images/ZIP/CBZ/PDF)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/jobs</code></td>
+<td>Body <code>{ingest_id, pages, settings}</code> → <code>{job_id}</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/jobs/{job_id}</code></td>
+<td>Stage, progress, per-page status, errors</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/jobs/{job_id}/pages/{n}/retry</code></td>
+<td>Retry a failed page</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/chapters/{chapter_id}</code></td>
+<td>Metadata + original/translated page URLs</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/chapters/{chapter_id}/pdf</code></td>
+<td>Download PDF</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/chapters/{chapter_id}</code></td>
+<td>Delete stored data</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/health</code></td>
+<td>Health check</td>
+</tr>
+</tbody>
+</table>
+<h3>6.4 Data Model (summary)</h3>
+<p><code>Chapter</code>, <code>IngestSession</code>, <code>Job</code>, <code>Page(status, regions_json)</code>, <code>Glossary</code> — as needed, with timestamps and source-layer metadata.</p>
+<hr>
+<h2>7. Non-Functional Requirements</h2>
+<ul>
+<li><strong>Performance:</strong> a 20-page chapter should finish in roughly 5–10 minutes within free-tier limits (rate limiting may dominate).</li>
+<li><strong>Reliability:</strong> all external calls have timeouts, retries, and structured error logs.</li>
+<li><strong>Security:</strong> the app binds to <code>127.0.0.1</code> only (local use); API key never reaches the browser; SSRF guard (FR-1); path-traversal protection; upload size/type validation and ZIP-bomb protection; request size limits.</li>
+<li><strong>Cost control:</strong> quota tracking, <code>MAX_PAGES_PER_JOB</code>, image downscaling, caching.</li>
+<li><strong>Observability:</strong> structured logs and per-stage timing; debug view showing detected regions.</li>
+<li><strong>Portability:</strong> documented one-command local run.</li>
+</ul>
+<hr>
+<h2>8. Legal &amp; Compliance Constraints</h2>
+<ul>
+<li>Personal, non-commercial use only; no public gallery or sharing features.</li>
+<li>Respect target sites' rate limits and terms; throttle and identify requests politely; never circumvent access controls.</li>
+<li>All content stays on the user's machine; include a &quot;Delete chapter data&quot; action and optional auto-cleanup (e.g., after 7 days).</li>
+<li>Show a short in-app notice that users are responsible for complying with copyright law in their jurisdiction.</li>
+</ul>
+<hr>
+<h2>9. Roadmap &amp; Acceptance Criteria</h2>
+<p><strong>Phase 1 — Foundation &amp; Core Ingestion.</strong> Monorepo scaffold, config, DB, health check, SSRF guard, Layer 1 static extractor with scoring, MangaDex adapter, <code>POST /api/ingest</code>.
+<em>Accepted when:</em> the extractor returns correctly ordered page lists for every fixture type (static, lazy-load, paginated, webtoon strip), works on public URLs the owner provides, MangaDex works through its adapter, invalid/private URLs are rejected safely, and tests pass.</p>
+<p><strong>Phase 2 — Ingestion Hardening.</strong> Playwright Layer 2, Gemini-assisted Layer 3, manual upload fallback (images/ZIP/CBZ/PDF), layer orchestrator with confidence reporting.
+<em>Accepted when:</em> JS-rendered/lazy-loaded reader sites work, and any failing site can still be processed through manual upload.</p>
+<p><strong>Phase 3 — Reader &amp; Review UI (no translation yet).</strong> Home, review screen (reorder/delete/add), original-page reader, responsive layout.
+<em>Accepted when:</em> URL → review → read originals works end to end on desktop and mobile.</p>
+<p><strong>Phase 4 — Gemini Analysis &amp; Translation.</strong> FR-2 and FR-3 with structured output, webtoon slicing, glossary, retries, rate limiter, mocked-API tests.
+<em>Accepted when:</em> a sample chapter yields validated regions and consistent Indonesian translations within free-tier limits.</p>
+<p><strong>Phase 5 — Rendering.</strong> Overlay mode (mask, erase, typeset) and region debug view.
+<em>Accepted when:</em> Indonesian text fits inside ≥90% of standard dialogue bubbles and output dimensions match originals.</p>
+<p><strong>Phase 6 — Jobs, Progress, Toggle, PDF.</strong> Background runner, progress (polling/SSE), per-page retry, Original/Translated toggle, PDF export, caching.
+<em>Accepted when:</em> hands-off flow works: paste link → review → live progress → read → download PDF.</p>
+<p><strong>Phase 7 — Polish.</strong> Settings drawer, experimental <code>gemini_image</code> mode with fallback, cleanup action, Docker, README, error-message polish.
+<em>Accepted when:</em> all FR items are met and a new developer can run the project in under 10 minutes.</p>
+<hr>
+<h2>10. Success Metrics</h2>
+<ul>
+<li>≥90% of dialogue regions detected on test chapters.</li>
+<li>≥85% of sampled translated lines judged natural and understandable.</li>
+<li>Page-level success rate ≥95%.</li>
+<li>Automatic ingestion (layers 0–3) succeeds for ≥80% of public sites the owner tries; the remainder succeed via manual fallback (100% coverage).</li>
+</ul>
+<hr>
+<h2>11. Owner Decisions (resolved — do not re-ask)</h2>
+<ol>
+<li><strong>Tone:</strong> Indonesian slang (&quot;gaul&quot;), natural and not stiff (see FR-3).</li>
+<li><strong>Deployment:</strong> local-only; no hosting, no auth required in v1.</li>
+<li><strong>SFX:</strong> leave in original form by default.</li>
+<li><strong>Sources:</strong> fully unrestricted. The product must work with <strong>any publicly accessible site</strong>; there is no fixed or whitelisted site list. Do not hard-code, optimize for, or limit support to any particular website. MangaDex is only one optional official-API adapter among many possible adapters. Testing must not depend on a predefined set of sites: use locally generated HTML fixtures that mimic common reader structures (static pages, lazy-loaded images, JavaScript-rendered readers, vertical webtoon strips, paginated one-image-per-page readers) plus any public URLs the owner pastes at any time. Sites behind login, paywall, or anti-bot protection are handled by the manual upload fallback and are never circumvented.</li>
+</ol>
+<hr>
+<h2>12. First Task for the Agent</h2>
+<p>Read this entire PRD, then respond with:</p>
+<ol>
+<li>A summary of your understanding (≤10 lines).</li>
+<li>Risks or ambiguities you identify, especially around universal ingestion and free-tier Gemini limits.</li>
+<li>A detailed <strong>Implementation Plan for Phase 1 only</strong>.</li>
+</ol>
+<p>Do not write code until I approve.</p>
+
+</body></html>
