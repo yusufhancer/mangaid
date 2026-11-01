@@ -113,48 +113,98 @@ async def _search_komikindo(q: str, limit: int) -> List[ExplorerMangaItem]:
         f"https://komikindo.tv/?s={quote(q)}",
     ]
     html = ""
-    async with httpx.AsyncClient(timeout=15.0, headers=WEB_HEADERS, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=10.0, headers=WEB_HEADERS, follow_redirects=True) as client:
         for u in urls_to_try:
             try:
                 resp = await client.get(u)
-                if resp.status_code == 200 and resp.text:
-                    html = resp.text
-                    break
+                if resp.status_code == 200 and resp.text and len(resp.text) > 2000:
+                    if "Just a moment..." not in resp.text:
+                        html = resp.text
+                        break
             except Exception as e:
                 logger.warning(f"Failed fetching {u}: {e}")
 
-    if not html:
-        return []
-
-    soup = BeautifulSoup(html, "html.parser")
     results = []
-    posts = soup.select(".animepost, .bsx, .film-list .animepost")
-    for post in posts[:limit]:
-        a = post.select_one("a")
-        title_el = post.select_one(".tt, h4, .title, h2")
-        img = post.select_one("img")
-        status_el = post.select_one(".type, .status, .typeflag")
+    if html:
+        soup = BeautifulSoup(html, "html.parser")
+        posts = soup.select(".animepost, .bsx, .film-list .animepost")
+        for post in posts[:limit]:
+            a = post.select_one("a")
+            title_el = post.select_one(".tt, h4, .title, h2")
+            img = post.select_one("img")
+            status_el = post.select_one(".type, .status, .typeflag")
 
-        if not a or not title_el:
-            continue
+            if not a or not title_el:
+                continue
 
-        url = a.get("href", "").strip()
-        title = title_el.get_text(strip=True)
-        img_src = (img.get("src") or img.get("data-src") or "") if img else ""
-        cover_proxy = f"/api/proxy/image?url={quote(img_src, safe='')}" if img_src else None
-        status = status_el.get_text(strip=True) if status_el else "Manga"
+            url = a.get("href", "").strip()
+            title = title_el.get_text(strip=True)
+            img_src = (img.get("src") or img.get("data-src") or "") if img else ""
+            cover_proxy = f"/api/proxy/image?url={quote(img_src, safe='')}" if img_src else None
+            status = status_el.get_text(strip=True) if status_el else "Manga"
 
-        encoded_id = f"ki-{quote(url, safe='')}"
-        results.append(ExplorerMangaItem(
-            id=encoded_id,
-            title=title,
-            description="Scanlation Komik Bahasa Indonesia",
-            status=status,
-            cover_url=cover_proxy,
-            tags=["Komik Indo", "Bahasa ID"],
-            source="komikindo",
-            original_url=url
-        ))
+            encoded_id = f"ki-{quote(url, safe='')}"
+            results.append(ExplorerMangaItem(
+                id=encoded_id,
+                title=title,
+                description="Scanlation Komik Bahasa Indonesia",
+                status=status,
+                cover_url=cover_proxy,
+                tags=["Komik Indo", "Bahasa ID"],
+                source="komikindo",
+                original_url=url
+            ))
+
+    # Automatic fallback if Komikindo is blocked by Cloudflare on datacenter IPs:
+    # Query MangaDex Indonesian-translated catalog (availableTranslatedLanguage[]=id)
+    if not results:
+        try:
+            params = [
+                ("title", q.strip()),
+                ("limit", str(limit)),
+                ("availableTranslatedLanguage[]", "id"),
+                ("includes[]", "cover_art"),
+                ("order[relevance]", "desc"),
+                ("contentRating[]", "safe"),
+                ("contentRating[]", "suggestive"),
+            ]
+            async with httpx.AsyncClient(timeout=15.0, headers=MANGADEX_HEADERS) as client:
+                resp = await client.get(f"{MANGADEX_API_BASE}/manga", params=params)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for item in data.get("data", []):
+                        m_id = item.get("id")
+                        attr = item.get("attributes", {})
+                        t_dict = attr.get("title", {})
+                        title = None
+                        if isinstance(t_dict, dict) and t_dict:
+                            title = t_dict.get("en") or t_dict.get("ja-ro") or next(iter(t_dict.values()), None)
+                        if not title:
+                            title = "Untitled Manga"
+
+                        cover_url = None
+                        for rel in item.get("relationships", []):
+                            if rel.get("type") == "cover_art":
+                                fn = rel.get("attributes", {}).get("fileName")
+                                if fn:
+                                    raw_cover = f"https://uploads.mangadex.org/covers/{m_id}/{fn}.256.jpg"
+                                    cover_url = f"/api/proxy/image?url={quote(raw_cover, safe='')}"
+                                break
+
+                        results.append(ExplorerMangaItem(
+                            id=m_id,
+                            title=title,
+                            description="Tersedia Bab Bahasa Indonesia (Scanlation Indo)",
+                            status=attr.get("status"),
+                            year=attr.get("year"),
+                            cover_url=cover_url,
+                            tags=["Sub Indo", "Bahasa ID"],
+                            source="komikindo",
+                            original_url=f"https://mangadex.org/title/{m_id}"
+                        ))
+        except Exception as e:
+            logger.warning(f"Indonesian fallback search error: {e}")
+
     return results
 
 async def _search_nhentai(q: str, limit: int) -> List[ExplorerMangaItem]:

@@ -27,16 +27,3 @@ def health_check():
 @router.get("/version")
 def get_version():
     return CURRENT_VERSION
-
-@router.get("/diag")
-async def run_diag(url: str):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    }
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as c:
-        try:
-            r = await c.get(url, headers=headers)
-            return {"url": url, "status": r.status_code, "len": len(r.text), "preview": r.text[:200]}
-        except Exception as e:
-            return {"url": url, "error": str(e)}
