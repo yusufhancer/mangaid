@@ -4,15 +4,15 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.3.0",
+    "version": "1.4.0",
     "release_date": "1 November 2026",
-    "title": "MangaID Universal Multi-Source Explorer",
+    "title": "MangaID Truly Universal Edition with RAW Manga, Multi-Genre Filter & Direct Reader",
     "changelog": [
-        "Pencarian Multi-Sumber (Explorer): Bebas pilih sumber pencarian antara MangaDex, Komik Indo (Komikindo), atau nhentai (Doujinshi 18+)",
-        "Zero Duplikat: Hasil pencarian rapi terisolasi per provider pilihan tanpa judul kembar",
-        "Proxy Cover Gambar Universal: Dukungan anti-hotlink untuk poster Komikindo dan nhentai",
-        "One-Click Ingestion: Langsung terjemahkan bab komik/doujinshi dari katalog tanpa copy-paste URL",
-        "Sistem Notifikasi Update In-App & Native Web Push"
+        "Dukungan RAW Manga: Eksplorasi ribuan manga & manhwa RAW rilis resmi Jepang (JA) dan Korea (KO)",
+        "Opsi 'Baca Langsung' & Otomatis Simpan Riwayat: Langsung baca bab komik tanpa proses terjemahan AI dengan viewer bebas iklan",
+        "Filter Multi-Genre: Bebas filter komik berdasarkan lebih dari 1 genre sekaligus (Action, Romance, Isekai, Comedy, dsb)",
+        "Pencarian Multi-Sumber Terpadu: MangaDex Global, RAW Manga, Komik Indo, dan nhentai 18+",
+        "Perbaikan Sistem Navigasi Chapter & Performa Image Proxy"
     ]
 }
 

@@ -38,6 +38,7 @@ import {
   Volume2,
   Sparkles,
   Bell,
+  Filter,
 } from "lucide-react";
 
 interface AppVersionInfo {
@@ -158,6 +159,12 @@ interface ExplorerChapter {
   source?: string;
 }
 
+const AVAILABLE_GENRES = [
+  "Action", "Romance", "Comedy", "Fantasy", "Drama", "Isekai",
+  "Horror", "Mystery", "Sci-Fi", "Slice of Life", "Supernatural",
+  "Adventure", "Sports", "Ecchi"
+];
+
 export default function MangaIDApp() {
   // Navigation states: 'home' | 'review' | 'progress' | 'reader'
   const [view, setView] = useState<"home" | "review" | "progress" | "reader">("home");
@@ -172,10 +179,11 @@ export default function MangaIDApp() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Explorer states
-  const [explorerSource, setExplorerSource] = useState<"mangadex" | "komikindo" | "nhentai">("mangadex");
+  const [explorerSource, setExplorerSource] = useState<"mangadex" | "raw" | "komikindo" | "nhentai">("mangadex");
   const [explorerQuery, setExplorerQuery] = useState("");
   const [explorerLoading, setExplorerLoading] = useState(false);
   const [explorerResults, setExplorerResults] = useState<ExplorerManga[]>([]);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [explorerHasSearched, setExplorerHasSearched] = useState(false);
   const [explorerSelectedManga, setExplorerSelectedManga] = useState<ExplorerManga | null>(null);
   const [explorerChapters, setExplorerChapters] = useState<ExplorerChapter[]>([]);
@@ -184,6 +192,7 @@ export default function MangaIDApp() {
   const [explorerChapterSearch, setExplorerChapterSearch] = useState("");
   const [explorerSortOrder, setExplorerSortOrder] = useState<"asc" | "desc">("asc");
   const [ingestingChapterId, setIngestingChapterId] = useState<string | null>(null);
+  const [directReadingChapterId, setDirectReadingChapterId] = useState<string | null>(null);
 
   // Settings
   const [showSettings, setShowSettings] = useState(false);
@@ -488,7 +497,7 @@ export default function MangaIDApp() {
   };
 
   // Explorer handlers
-  const handleSearchManga = async (customQuery?: string, customSource?: "mangadex" | "komikindo" | "nhentai") => {
+  const handleSearchManga = async (customQuery?: string, customSource?: "mangadex" | "raw" | "komikindo" | "nhentai") => {
     const q = (customQuery !== undefined ? customQuery : explorerQuery).trim();
     const src = customSource !== undefined ? customSource : explorerSource;
     if (!q) return;
@@ -509,6 +518,12 @@ export default function MangaIDApp() {
     } finally {
       setExplorerLoading(false);
     }
+  };
+
+  const toggleGenre = (genre: string) => {
+    setSelectedGenres((prev) =>
+      prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]
+    );
   };
 
   const loadMangaChapters = async (mangaId: string, lang: string) => {
@@ -532,6 +547,83 @@ export default function MangaIDApp() {
     setExplorerChapterSearch("");
     setExplorerSortOrder("asc");
     loadMangaChapters(manga.id, explorerLang);
+  };
+
+  const handleDirectReadExplorerChapter = async (chapter: ExplorerChapter) => {
+    setDirectReadingChapterId(chapter.id);
+    setErrorMsg(null);
+
+    try {
+      let targetUrl = chapter.external_url;
+      if (!targetUrl) {
+        if (chapter.id.startsWith("nh-")) {
+          targetUrl = chapter.id.replace("nh-", "");
+        } else if (chapter.id.startsWith("ki-")) {
+          targetUrl = decodeURIComponent(chapter.id.replace("ki-", ""));
+        } else if (chapter.id.startsWith("http")) {
+          targetUrl = chapter.id;
+        } else {
+          targetUrl = `https://mangadex.org/chapter/${chapter.id}`;
+        }
+      }
+
+      // 1. Ingest chapter pages
+      const ingestResp = await apiFetch(`${BACKEND_URL}/api/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: targetUrl }),
+      });
+
+      if (!ingestResp.ok) {
+        let errDet = "Gagal memproses bab manga.";
+        try {
+          const err = await ingestResp.json();
+          errDet = err.detail || errDet;
+        } catch {
+          const text = await ingestResp.text();
+          if (text) errDet = `Server error: ${text.slice(0, 100)}`;
+        }
+        throw new Error(errDet);
+      }
+
+      const ingestData: IngestData = await ingestResp.json();
+      const pageUrls = ingestData.pages.map((p) => p.image_url);
+
+      // 2. Simpan langsung ke database chapters & riwayat pembaca
+      const saveResp = await apiFetch(`${BACKEND_URL}/api/chapters/direct-read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: targetUrl,
+          title: ingestData.title || explorerSelectedManga?.title || "Manga",
+          chapter_number: ingestData.chapter_number || chapter.chapter_number || "1",
+          pages: pageUrls,
+        }),
+      });
+
+      if (!saveResp.ok) {
+        throw new Error("Gagal menyimpan bab ke riwayat pembaca.");
+      }
+
+      const savedData: ChapterData = await saveResp.json();
+
+      // 3. Buka langsung di reader & refresh riwayat
+      setExplorerSelectedManga(null);
+      setChapterData(savedData);
+      setSinglePageIdx(0);
+      setView("reader");
+
+      if (typeof window !== "undefined") {
+        window.history.pushState({}, "", `?chapter=${savedData.id}`);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      loadSavedChapters();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Gagal memuat bab untuk dibaca.");
+    } finally {
+      setDirectReadingChapterId(null);
+    }
   };
 
   const handleIngestExplorerChapter = async (chapter: ExplorerChapter) => {
@@ -1115,6 +1207,15 @@ export default function MangaIDApp() {
     });
     return list;
   }, [explorerChapters, explorerChapterSearch, explorerSortOrder]);
+
+  // Explorer filtered results by selected genres
+  const filteredExplorerResults = useMemo(() => {
+    if (selectedGenres.length === 0) return explorerResults;
+    return explorerResults.filter((manga) => {
+      const combined = ((manga.tags || []).join(" ") + " " + (manga.title || "")).toLowerCase();
+      return selectedGenres.some((g) => combined.includes(g.toLowerCase()));
+    });
+  }, [explorerResults, selectedGenres]);
 
   // Rename handlers
   const handleOpenRename = (target: RenameTarget) => {
@@ -1976,6 +2077,7 @@ export default function MangaIDApp() {
                       <span className="text-xs font-mono text-[#8E8B84] flex-shrink-0">Sumber:</span>
                       {[
                         { id: "mangadex", label: "MangaDex (Global)", icon: "🌐" },
+                        { id: "raw", label: "RAW Manga (Jepang/Korea)", icon: "🇯🇵" },
                         { id: "komikindo", label: "Komik Indo (Komikindo)", icon: "🇮🇩" },
                         { id: "nhentai", label: "nhentai (Doujinshi 18+)", icon: "🔞" },
                       ].map((src) => (
@@ -1983,7 +2085,7 @@ export default function MangaIDApp() {
                           key={src.id}
                           type="button"
                           onClick={() => {
-                            const newSrc = src.id as "mangadex" | "komikindo" | "nhentai";
+                            const newSrc = src.id as "mangadex" | "raw" | "komikindo" | "nhentai";
                             setExplorerSource(newSrc);
                             if (explorerQuery.trim()) {
                               handleSearchManga(explorerQuery, newSrc);
@@ -2017,7 +2119,9 @@ export default function MangaIDApp() {
                           type="text"
                           required
                           placeholder={
-                            explorerSource === "nhentai"
+                            explorerSource === "raw"
+                              ? "Ketik judul manga RAW Jepang/Korea (contoh: Oshi no Ko, Jujutsu Kaisen, Frieren)..."
+                              : explorerSource === "nhentai"
                               ? "Ketik judul doujinshi atau kode angka (contoh: 177013, Naruto, Romance)..."
                               : explorerSource === "komikindo"
                               ? "Ketik judul komik bahasa Indonesia (contoh: Jujutsu Kaisen, Solo Leveling)..."
@@ -2051,10 +2155,56 @@ export default function MangaIDApp() {
                       </button>
                     </form>
 
+                    {/* Multi-Select Genre Filter Bar */}
+                    <div className="pt-1 pb-1">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5 text-xs font-mono text-[#8E8B84]">
+                          <Filter className="w-3.5 h-3.5 text-[#E8452C]" />
+                          <span>Filter Genre (Bisa Multi-Pilih):</span>
+                          {selectedGenres.length > 0 && (
+                            <span className="px-1.5 py-0.2 rounded bg-[#E8452C] text-white text-[10px] font-bold">
+                              {selectedGenres.length} aktif
+                            </span>
+                          )}
+                        </div>
+                        {selectedGenres.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedGenres([])}
+                            className="text-[11px] font-mono text-[#E8452C] hover:underline cursor-pointer"
+                          >
+                            Reset Genre
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                        {AVAILABLE_GENRES.map((genre) => {
+                          const isSelected = selectedGenres.includes(genre);
+                          return (
+                            <button
+                              key={genre}
+                              type="button"
+                              onClick={() => toggleGenre(genre)}
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1 cursor-pointer btn-press border whitespace-nowrap ${
+                                isSelected
+                                  ? "bg-[#E8452C] border-[#E8452C] text-white font-semibold shadow-sm"
+                                  : "bg-[#161617] border-[#2A2A2C] text-[#8E8B84] hover:text-[#ECE9E2] hover:border-[#8E8B84]/50"
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                              <span>{genre}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     {/* Quick suggestion tags */}
                     <div className="flex items-center gap-1.5 flex-wrap text-xs">
                       <span className="text-[#8E8B84] font-mono mr-1">Rekomendasi:</span>
-                      {(explorerSource === "nhentai"
+                      {(explorerSource === "raw"
+                        ? ["Oshi no Ko", "Jujutsu Kaisen", "Frieren", "Chainsaw Man", "Dandadan", "Kingdom"]
+                        : explorerSource === "nhentai"
                         ? ["177013", "Romance", "School", "Comedy", "Color", "English"]
                         : explorerSource === "komikindo"
                         ? ["One Piece", "Jujutsu Kaisen", "Solo Leveling", "Tower of God", "Magic Emperor", "Martial Peak"]
@@ -2079,20 +2229,25 @@ export default function MangaIDApp() {
                       <div className="py-12 flex flex-col items-center justify-center gap-3 text-[#8E8B84] animate-fade-in">
                         <RefreshCw className="w-6 h-6 animate-spin text-[#E8452C]" />
                         <span className="text-xs font-mono animate-pulse-subtle">
-                          {explorerSource === "nhentai"
+                          {explorerSource === "raw"
+                            ? "Menghubungi katalog rilis asli RAW (Jepang/Korea)..."
+                            : explorerSource === "nhentai"
                             ? "Menghubungi katalog doujinshi nhentai..."
                             : explorerSource === "komikindo"
                             ? "Menghubungi server komik scanlation Indonesia..."
                             : "Menghubungi katalog resmi MangaDex..."}
                         </span>
                       </div>
-                    ) : explorerResults.length > 0 ? (
+                    ) : filteredExplorerResults.length > 0 ? (
                       <div className="pt-2 animate-fade-in">
-                        <div className="text-xs text-[#8E8B84] font-mono mb-3">
-                          Ditemukan {explorerResults.length} hasil untuk "{explorerQuery}":
+                        <div className="flex items-center justify-between text-xs text-[#8E8B84] font-mono mb-3">
+                          <span>
+                            Ditemukan {filteredExplorerResults.length} hasil untuk "{explorerQuery}"
+                            {selectedGenres.length > 0 && ` (Filter Genre: ${selectedGenres.join(", ")})`}:
+                          </span>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-                          {explorerResults.map((manga) => (
+                          {filteredExplorerResults.map((manga) => (
                             <div
                               key={manga.id}
                               onClick={() => handleSelectManga(manga)}
@@ -2125,11 +2280,13 @@ export default function MangaIDApp() {
                                   <div className={`absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded-[3px] font-mono text-[9px] uppercase tracking-wider border backdrop-blur ${
                                     manga.source === "nhentai"
                                       ? "bg-[#D4493E]/85 border-[#D4493E] text-white font-bold"
+                                      : manga.source === "raw"
+                                      ? "bg-[#9B51E0]/85 border-[#9B51E0] text-white font-bold"
                                       : manga.source === "komikindo"
                                       ? "bg-[#2ECC71]/25 border-[#2ECC71]/40 text-[#2ECC71] font-bold"
                                       : "bg-[#0D0D0E]/80 border-[#2A2A2C] text-[#ECE9E2]"
                                   }`}>
-                                    {manga.source === "nhentai" ? "🔞 nhentai" : manga.source === "komikindo" ? "🇮🇩 Komik Indo" : "🌐 MangaDex"}
+                                    {manga.source === "nhentai" ? "🔞 nhentai" : manga.source === "raw" ? "🇯🇵 RAW Manga" : manga.source === "komikindo" ? "🇮🇩 Komik Indo" : "🌐 MangaDex"}
                                   </div>
                                 )}
                               </div>
@@ -3435,12 +3592,16 @@ export default function MangaIDApp() {
                     <span className={`px-1.5 py-0.5 rounded-[3px] font-mono text-[10px] uppercase font-bold border ${
                       explorerSelectedManga.source === "nhentai"
                         ? "bg-[#D4493E]/20 border-[#D4493E]/40 text-[#D4493E]"
+                        : explorerSelectedManga.source === "raw"
+                        ? "bg-[#9B51E0]/20 border-[#9B51E0]/40 text-[#9B51E0]"
                         : explorerSelectedManga.source === "komikindo"
                         ? "bg-[#2ECC71]/20 border-[#2ECC71]/40 text-[#2ECC71]"
                         : "bg-[#E8452C]/10 border-[#E8452C]/30 text-[#E8452C]"
                     }`}>
                       {explorerSelectedManga.source === "nhentai"
                         ? "🔞 nhentai"
+                        : explorerSelectedManga.source === "raw"
+                        ? "🇯🇵 RAW Manga"
                         : explorerSelectedManga.source === "komikindo"
                         ? "🇮🇩 Komik Indo"
                         : "🌐 MangaDex"}
@@ -3595,23 +3756,47 @@ export default function MangaIDApp() {
                           Buka di Penerbit Resmi ↗
                         </a>
                       ) : (
-                        <button
-                          disabled={ingestingChapterId === ch.id}
-                          onClick={() => handleIngestExplorerChapter(ch)}
-                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[5px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          {ingestingChapterId === ch.id ? (
-                            <>
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              <span>Mengambil...</span>
-                            </>
-                          ) : (
-                            <>
-                              <BookOpen className="w-3.5 h-3.5" />
-                              <span>Terjemahkan Bab Ini ➔</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          {/* Opsi 1: Baca Langsung */}
+                          <button
+                            disabled={directReadingChapterId === ch.id || ingestingChapterId === ch.id}
+                            onClick={() => handleDirectReadExplorerChapter(ch)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] border border-[#2A2A2C] bg-[#161617] hover:bg-[#1C1C1E] text-[#ECE9E2] hover:text-white text-xs font-medium transition-all cursor-pointer btn-press disabled:opacity-50"
+                            title="Baca langsung tanpa proses translasi (bebas iklan & otomatis masuk Riwayat)"
+                          >
+                            {directReadingChapterId === ch.id ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <span>Menyiapkan...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-3.5 h-3.5 text-[#8E8B84]" />
+                                <span>Baca Langsung</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Opsi 2: Terjemahkan AI */}
+                          <button
+                            disabled={ingestingChapterId === ch.id || directReadingChapterId === ch.id}
+                            onClick={() => handleIngestExplorerChapter(ch)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-xs font-semibold shadow-sm transition-all cursor-pointer btn-press disabled:opacity-50"
+                            title="Terjemahkan bab ini ke bahasa Indonesia dengan AI"
+                          >
+                            {ingestingChapterId === ch.id ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <span>Mengambil...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Languages className="w-3.5 h-3.5" />
+                                <span>Terjemahkan AI ➔</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>

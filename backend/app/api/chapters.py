@@ -1,10 +1,12 @@
 import io
 import os
 import shutil
+import uuid
+from urllib.parse import quote
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import img2pdf
@@ -15,6 +17,12 @@ from ..core.config import settings
 from ..core.logging import logger
 
 router = APIRouter(prefix="/chapters", tags=["Chapters"])
+
+class DirectReadRequest(BaseModel):
+    url: str
+    title: Optional[str] = None
+    chapter_number: Optional[str] = None
+    pages: List[str]
 
 class PageItemResponse(BaseModel):
     page_number: int
@@ -38,6 +46,55 @@ class ChapterDetailResponse(BaseModel):
     language_source: str
     pages: List[PageItemResponse]
 
+@router.post("/direct-read", response_model=ChapterDetailResponse)
+def create_direct_read(payload: DirectReadRequest, request: Request, db: Session = Depends(get_db)):
+    if not payload.pages:
+        raise HTTPException(status_code=400, detail="Daftar halaman tidak boleh kosong.")
+
+    device_id = request.headers.get("x-device-id") or "default"
+    chapter_id = str(uuid.uuid4())
+
+    chapter = Chapter(
+        id=chapter_id,
+        title=payload.title or "Untitled Manga",
+        chapter_number=payload.chapter_number or "1",
+        language_source="id",
+        device_id=device_id
+    )
+    db.add(chapter)
+
+    page_records = []
+    for idx, p_url in enumerate(payload.pages, start=1):
+        rec = PageRecord(
+            id=str(uuid.uuid4()),
+            chapter_id=chapter_id,
+            page_number=idx,
+            original_path=p_url,
+            translated_path=p_url,
+            status="rendered"
+        )
+        db.add(rec)
+        page_records.append(rec)
+
+    db.commit()
+    db.refresh(chapter)
+
+    return ChapterDetailResponse(
+        id=chapter.id,
+        title=chapter.title,
+        chapter_number=chapter.chapter_number,
+        language_source=chapter.language_source,
+        pages=[
+            PageItemResponse(
+                page_number=p.page_number,
+                original_url=f"/api/chapters/{chapter_id}/pages/{p.page_number}/original",
+                translated_url=f"/api/chapters/{chapter_id}/pages/{p.page_number}/translated",
+                status=p.status
+            )
+            for p in page_records
+        ]
+    )
+
 @router.get("", response_model=List[ChapterSummaryResponse])
 def list_chapters(request: Request, db: Session = Depends(get_db)):
     device_id = request.headers.get("x-device-id") or "default"
@@ -53,7 +110,14 @@ def list_chapters(request: Request, db: Session = Depends(get_db)):
         for p in c.pages:
             if p.page_number not in pages_map or p.status == "rendered":
                 pages_map[p.page_number] = p
-        rendered = sum(1 for p in pages_map.values() if p.status == "rendered" and p.translated_path and os.path.exists(p.translated_path))
+        rendered = sum(
+            1 for p in pages_map.values()
+            if p.status == "rendered" and (
+                (p.translated_path and os.path.exists(p.translated_path))
+                or (p.original_path and p.original_path.startswith("http"))
+                or (p.translated_path and p.translated_path.startswith("http"))
+            )
+        )
         res.append(ChapterSummaryResponse(
             id=c.id,
             title=c.title,
@@ -154,7 +218,11 @@ def get_chapter_detail(chapter_id: str, db: Session = Depends(get_db)):
     pages_resp = []
     for p_num in sorted(pages_map.keys()):
         p = pages_map[p_num]
-        has_trans = bool(p.translated_path and os.path.exists(p.translated_path) and p.status == "rendered")
+        has_trans = bool(
+            (p.translated_path and os.path.exists(p.translated_path))
+            or (p.translated_path and p.translated_path.startswith("http"))
+            or (p.status == "rendered")
+        )
         pages_resp.append(PageItemResponse(
             page_number=p.page_number,
             original_url=f"/api/chapters/{chapter_id}/pages/{p.page_number}/original",
@@ -172,6 +240,18 @@ def get_chapter_detail(chapter_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{chapter_id}/pages/{page_num}/original")
 def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depends(get_db)):
+    record = db.query(PageRecord).filter(
+        PageRecord.chapter_id == chapter_id,
+        PageRecord.page_number == page_num
+    ).first()
+    if record and record.original_path:
+        if record.original_path.startswith("http"):
+            return RedirectResponse(f"/api/proxy/image?url={quote(record.original_path, safe='')}")
+        if os.path.exists(record.original_path):
+            ext = Path(record.original_path).suffix.lower()
+            media_type = "image/png" if ext == ".png" else "image/jpeg"
+            return FileResponse(record.original_path, media_type=media_type)
+
     orig_dir = settings.data_path / "chapters" / chapter_id / "original"
     jpg_path = orig_dir / f"page_{page_num:04d}.jpg"
     png_path = orig_dir / f"page_{page_num:04d}.png"
@@ -180,19 +260,22 @@ def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depend
     if png_path.exists():
         return FileResponse(str(png_path), media_type="image/png")
 
+    raise HTTPException(status_code=404, detail="Original image not found.")
+
+@router.get("/{chapter_id}/pages/{page_num}/translated")
+def get_translated_page_image(chapter_id: str, page_num: int, db: Session = Depends(get_db)):
     record = db.query(PageRecord).filter(
         PageRecord.chapter_id == chapter_id,
         PageRecord.page_number == page_num
     ).first()
-    if not record or not record.original_path or not os.path.exists(record.original_path):
-        raise HTTPException(status_code=404, detail="Original image not found.")
+    if record and record.translated_path:
+        if record.translated_path.startswith("http"):
+            return RedirectResponse(f"/api/proxy/image?url={quote(record.translated_path, safe='')}")
+        if os.path.exists(record.translated_path):
+            ext = Path(record.translated_path).suffix.lower()
+            media_type = "image/jpeg" if ext in (".jpg", ".jpeg", ".webp") else "image/png"
+            return FileResponse(record.translated_path, media_type=media_type)
 
-    ext = Path(record.original_path).suffix.lower()
-    media_type = "image/png" if ext == ".png" else "image/jpeg"
-    return FileResponse(record.original_path, media_type=media_type)
-
-@router.get("/{chapter_id}/pages/{page_num}/translated")
-def get_translated_page_image(chapter_id: str, page_num: int, db: Session = Depends(get_db)):
     trans_dir = settings.data_path / "chapters" / chapter_id / "translated"
     png_path = trans_dir / f"page_{page_num:04d}.png"
     jpg_path = trans_dir / f"page_{page_num:04d}.jpg"
@@ -201,16 +284,7 @@ def get_translated_page_image(chapter_id: str, page_num: int, db: Session = Depe
     if jpg_path.exists():
         return FileResponse(str(jpg_path), media_type="image/jpeg")
 
-    record = db.query(PageRecord).filter(
-        PageRecord.chapter_id == chapter_id,
-        PageRecord.page_number == page_num
-    ).first()
-    if not record or not record.translated_path or not os.path.exists(record.translated_path):
-        raise HTTPException(status_code=404, detail="Translated image not found.")
-
-    ext = Path(record.translated_path).suffix.lower()
-    media_type = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
-    return FileResponse(record.translated_path, media_type=media_type)
+    raise HTTPException(status_code=404, detail="Translated image not found.")
 
 @router.get("/local-file/{session_id}/{filename}")
 def get_uploaded_file(session_id: str, filename: str):

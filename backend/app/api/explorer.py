@@ -107,6 +107,76 @@ async def _search_mangadex(q: str, limit: int) -> List[ExplorerMangaItem]:
         ))
     return results
 
+async def _search_raw_manga(q: str, limit: int) -> List[ExplorerMangaItem]:
+    params = [
+        ("title", q.strip()),
+        ("limit", str(limit)),
+        ("originalLanguage[]", "ja"),
+        ("originalLanguage[]", "ko"),
+        ("includes[]", "cover_art"),
+        ("order[relevance]", "desc"),
+        ("contentRating[]", "safe"),
+        ("contentRating[]", "suggestive"),
+        ("contentRating[]", "erotica"),
+    ]
+    async with httpx.AsyncClient(timeout=20.0, headers=MANGADEX_HEADERS) as client:
+        resp = await client.get(f"{MANGADEX_API_BASE}/manga", params=params)
+        resp.raise_for_status()
+        data = resp.json()
+
+    results = []
+    for item in data.get("data", []):
+        m_id = item.get("id")
+        attr = item.get("attributes", {})
+        t_dict = attr.get("title", {})
+        title = None
+        if isinstance(t_dict, dict) and t_dict:
+            title = t_dict.get("ja") or t_dict.get("ko") or t_dict.get("ja-ro") or t_dict.get("en") or next(iter(t_dict.values()), None)
+        if not title:
+            for alt in attr.get("altTitles", []):
+                if isinstance(alt, dict) and alt:
+                    title = alt.get("ja") or alt.get("ko") or alt.get("en") or next(iter(alt.values()), None)
+                    if title:
+                        break
+        if not title:
+            title = "Untitled RAW Manga"
+
+        desc_dict = attr.get("description", {})
+        desc = None
+        if isinstance(desc_dict, dict) and desc_dict:
+            desc = desc_dict.get("en") or desc_dict.get("ja") or next(iter(desc_dict.values()), None)
+
+        orig_lang = attr.get("originalLanguage", "ja")
+        lang_label = "🇯🇵 RAW Jepang" if orig_lang == "ja" else ("🇰🇷 RAW Korea" if orig_lang == "ko" else "🇨🇳 RAW China")
+
+        tags = [lang_label, "RAW"]
+        for t in attr.get("tags", []):
+            t_name = t.get("attributes", {}).get("name", {}).get("en")
+            if t_name and t_name not in tags:
+                tags.append(t_name)
+
+        cover_url = None
+        for rel in item.get("relationships", []):
+            if rel.get("type") == "cover_art":
+                file_name = rel.get("attributes", {}).get("fileName")
+                if file_name:
+                    raw_cover = f"https://uploads.mangadex.org/covers/{m_id}/{file_name}.256.jpg"
+                    cover_url = f"/api/proxy/image?url={quote(raw_cover, safe='')}"
+                break
+
+        results.append(ExplorerMangaItem(
+            id=m_id,
+            title=title,
+            description=desc or f"Manga RAW rilis asli {lang_label}",
+            status=attr.get("status"),
+            year=attr.get("year"),
+            cover_url=cover_url,
+            tags=tags[:6],
+            source="raw",
+            original_url=f"https://mangadex.org/title/{m_id}"
+        ))
+    return results
+
 async def _search_komikindo(q: str, limit: int) -> List[ExplorerMangaItem]:
     urls_to_try = [
         f"https://komikindo.ch/?s={quote(q)}",
@@ -283,13 +353,15 @@ async def _search_nhentai(q: str, limit: int) -> List[ExplorerMangaItem]:
 @router.get("/search", response_model=List[ExplorerMangaItem])
 async def search_manga(
     q: str = Query(..., min_length=1, description="Kata kunci pencarian judul manga"),
-    source: str = Query("mangadex", description="Sumber pencarian: mangadex, komikindo, nhentai"),
+    source: str = Query("mangadex", description="Sumber pencarian: mangadex, raw, komikindo, nhentai"),
     limit: int = Query(24, ge=1, le=50)
 ):
     source_clean = source.strip().lower()
     q_clean = q.strip()
     try:
-        if source_clean == "nhentai":
+        if source_clean in ("raw", "jepang", "korea"):
+            return await _search_raw_manga(q_clean, limit=limit)
+        elif source_clean == "nhentai":
             return await _search_nhentai(q_clean, limit=limit)
         elif source_clean in ("komikindo", "indo", "id"):
             return await _search_komikindo(q_clean, limit=limit)
