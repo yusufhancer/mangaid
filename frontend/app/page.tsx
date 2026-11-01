@@ -259,6 +259,8 @@ export default function MangaIDApp() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [genreSearchInput, setGenreSearchInput] = useState("");
   const [showGenreSearch, setShowGenreSearch] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashFading, setSplashFading] = useState(false);
   const [explorerHasSearched, setExplorerHasSearched] = useState(false);
   const [explorerSelectedManga, setExplorerSelectedManga] = useState<ExplorerManga | null>(null);
   const [explorerChapters, setExplorerChapters] = useState<ExplorerChapter[]>([]);
@@ -1025,6 +1027,16 @@ export default function MangaIDApp() {
     }
   }, [deviceId]);
 
+  // Splash Screen Timer (Smooth logo zoom intro from small to large)
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashFading(true), 1200);
+    const t2 = setTimeout(() => setShowSplash(false), 1600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
   // Fetch Chapter for Reader
   const fetchChapter = async (cId: string) => {
     try {
@@ -1601,6 +1613,36 @@ export default function MangaIDApp() {
 
   return (
     <div className="min-h-screen bg-[#0D0D0E] text-[#ECE9E2]">
+      {/* Intro Splash Logo Animation: Smooth scale from small to large, strictly no bounce */}
+      {showSplash && (
+        <div
+          className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0D0D0E] transition-opacity duration-400 ease-out pointer-events-none select-none ${
+            splashFading ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          <div className="flex flex-col items-center gap-4">
+            {/* Logo Container with Smooth Scale-Up Animation */}
+            <div className="relative animate-logo-zoom flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-[#E8452C]/25 blur-2xl scale-125 pointer-events-none" />
+              <img
+                src="/logo.png"
+                alt="MangaID Logo"
+                className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-[#2A2A2C] shadow-2xl relative z-10"
+              />
+            </div>
+
+            {/* Title & Tagline with subtle fade */}
+            <div className="text-center animate-fade-in z-10 space-y-1">
+              <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-[#ECE9E2]">
+                MangaID
+              </h1>
+              <p className="font-mono text-xs text-[#8E8B84] tracking-wide">
+                Universal Manga Translator
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Desktop Left Sidebar (Fixed to viewport, stays in place when scrolling) */}
       {view !== "reader" && (
         <aside className="hidden lg:flex w-64 h-screen fixed top-0 left-0 bottom-0 border-r border-[#2A2A2C] bg-[#0D0D0E] flex-col justify-between p-4 flex-shrink-0 z-30 select-none overflow-y-auto">

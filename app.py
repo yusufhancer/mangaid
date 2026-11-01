@@ -14,7 +14,7 @@ def gpu_health(x):
 frontend_out = Path(__file__).resolve().parent / "frontend" / "out"
 
 # 3. Gradio Blocks UI (Full-screen clean MangaID frame)
-with gr.Blocks(title="MangaID Universal AI Translator", css="footer {display: none !important;} .gradio-container {padding: 0 !important; max-width: 100% !important;}") as demo:
+with gr.Blocks(title="MangaID", css="footer {display: none !important;} .gradio-container {padding: 0 !important; max-width: 100% !important;}") as demo:
     gr.HTML('<iframe src="/index.html" style="position:fixed; top:0; left:0; width:100%; height:100%; border:none; margin:0; padding:0; z-index:999999;"></iframe>')
     btn = gr.Button("Ping", visible=False)
     txt = gr.Textbox(visible=False)
@@ -57,25 +57,45 @@ if (frontend_out / "_next").exists():
 if (frontend_out / "icons").exists():
     server_app.mount("/icons", StaticFiles(directory=str(frontend_out / "icons")), name="icons_assets")
 
-@server_app.get("/index.html")
-def serve_index():
+from starlette.routing import Route
+
+def serve_root(request=None):
     return FileResponse(frontend_out / "index.html")
 
-@server_app.get("/logo.png")
-def serve_logo():
-    return FileResponse(frontend_out / "logo.png")
+def serve_manifest(request=None):
+    return FileResponse(frontend_out / "manifest.json", media_type="application/manifest+json")
 
-@server_app.get("/manifest.json")
-def serve_manifest():
-    return FileResponse(frontend_out / "manifest.json")
-
-@server_app.get("/sw.js")
-def serve_sw():
-    return FileResponse(frontend_out / "sw.js")
-
-@server_app.get("/favicon.ico")
-def serve_favicon():
+def serve_favicon(request=None):
     return FileResponse(frontend_out / "favicon.ico")
+
+def serve_logo(request=None):
+    return FileResponse(frontend_out / "logo.png", media_type="image/png")
+
+def serve_sw(request=None):
+    return FileResponse(frontend_out / "sw.js", media_type="application/javascript")
+
+def serve_gradio_logo_override(request=None):
+    return FileResponse(frontend_out / "logo.png", media_type="image/png")
+
+# Remove any Gradio routes that hijack root, manifest, or favicon
+routes_to_remove = ["/", "/manifest.json", "/favicon.ico", "/static/img/logo_nosize.svg"]
+server_app.router.routes = [
+    r for r in server_app.router.routes
+    if getattr(r, "path", None) not in routes_to_remove
+]
+
+# Insert custom routes at index 0 so they always have top priority
+custom_routes = [
+    Route("/", serve_root, methods=["GET", "HEAD"]),
+    Route("/index.html", serve_root, methods=["GET", "HEAD"]),
+    Route("/manifest.json", serve_manifest, methods=["GET", "HEAD"]),
+    Route("/favicon.ico", serve_favicon, methods=["GET", "HEAD"]),
+    Route("/logo.png", serve_logo, methods=["GET", "HEAD"]),
+    Route("/sw.js", serve_sw, methods=["GET", "HEAD"]),
+    Route("/static/img/logo_nosize.svg", serve_gradio_logo_override, methods=["GET", "HEAD"]),
+]
+for r in reversed(custom_routes):
+    server_app.router.routes.insert(0, r)
 
 # 8. Keep process alive
 demo.block_thread()

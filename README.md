@@ -1,8 +1,8 @@
 ---
-title: MangaID Universal AI Translator
+title: MangaID
 emoji: 📖
-colorFrom: indigo
-colorTo: purple
+colorFrom: red
+colorTo: gray
 sdk: gradio
 pinned: false
 ---

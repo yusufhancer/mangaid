@@ -11,7 +11,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "MangaID — Universal Manga Translator",
+  title: "MangaID",
   description: "Baca manga dan manhwa apa pun dalam bahasa Indonesia.",
   manifest: "/manifest.json",
   referrer: "no-referrer",
