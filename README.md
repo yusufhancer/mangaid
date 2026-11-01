@@ -3,8 +3,7 @@ title: MangaID Universal AI Translator
 emoji: 📖
 colorFrom: indigo
 colorTo: purple
-sdk: docker
-app_port: 7860
+sdk: gradio
 pinned: false
 ---
 
