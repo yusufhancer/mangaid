@@ -39,6 +39,7 @@ import {
   Sparkles,
   Bell,
   Filter,
+  Tag,
 } from "lucide-react";
 
 interface AppVersionInfo {
@@ -159,11 +160,35 @@ interface ExplorerChapter {
   source?: string;
 }
 
-const AVAILABLE_GENRES = [
-  "Action", "Romance", "Comedy", "Fantasy", "Drama", "Isekai",
-  "Horror", "Mystery", "Sci-Fi", "Slice of Life", "Supernatural",
-  "Adventure", "Sports", "Ecchi"
-];
+const SOURCE_GENRES: Record<"mangadex" | "raw" | "komikindo" | "nhentai", string[]> = {
+  mangadex: [
+    "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mystery",
+    "Psychological", "Romance", "Sci-Fi", "Slice of Life", "Supernatural",
+    "Thriller", "Isekai", "Historical", "Martial Arts", "School Life", "Shounen",
+    "Shoujo", "Seinen", "Josei", "Sports", "Mecha", "Magic", "Tragedy",
+    "Post-Apocalyptic", "Reincarnation", "Time Travel", "Survival", "Demons",
+    "Monsters", "Vampires", "Zombies", "Crime", "Harem", "Reverse Harem"
+  ],
+  raw: [
+    "Action", "Fantasy", "Isekai", "RomCom", "Comedy", "Drama", "Seinen",
+    "Shounen", "Slice of Life", "Mystery", "Supernatural", "Sci-Fi", "Historical",
+    "School Life", "Josei", "Adventure", "Horror", "Reincarnation", "Psychological",
+    "Ecchi", "Magic", "Demons", "Martial Arts", "Harem"
+  ],
+  komikindo: [
+    "Action", "Adventure", "Fantasy", "Isekai", "Reinkarnasi", "System",
+    "Cultivation", "Overpowered", "Manhwa", "Manhua", "Martial Arts", "Magic",
+    "Dungeon", "Romance", "Comedy", "School", "Drama", "Supernatural",
+    "Shounen", "Monster", "Leveling", "Game", "Murim"
+  ],
+  nhentai: [
+    "Vanilla", "Romance", "Milf", "Schoolgirl Uniform", "Yuri", "Stockings",
+    "Ahegao", "Nakadashi", "Blowjob", "Maid", "Incest", "Impregnation",
+    "Dark Skin", "Glasses", "Netorare", "Big Breasts", "Group", "Paizuri",
+    "Sole Female", "Sole Male", "Virgin", "Swimsuit", "Bunny Girl", "Cosplay",
+    "Teacher", "Gyaru", "Mind Break", "Femdom", "Cheating", "Bondage"
+  ],
+};
 
 export default function MangaIDApp() {
   // Navigation states: 'home' | 'review' | 'progress' | 'reader'
@@ -497,17 +522,23 @@ export default function MangaIDApp() {
   };
 
   // Explorer handlers
-  const handleSearchManga = async (customQuery?: string, customSource?: "mangadex" | "raw" | "komikindo" | "nhentai") => {
+  const handleSearchManga = async (
+    customQuery?: string,
+    customSource?: "mangadex" | "raw" | "komikindo" | "nhentai",
+    customGenres?: string[]
+  ) => {
     const q = (customQuery !== undefined ? customQuery : explorerQuery).trim();
     const src = customSource !== undefined ? customSource : explorerSource;
-    if (!q) return;
+    const gn = customGenres !== undefined ? customGenres : selectedGenres;
+    if (!q && gn.length === 0) return;
 
     setExplorerLoading(true);
     setErrorMsg(null);
     setExplorerHasSearched(true);
 
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/explorer/search?q=${encodeURIComponent(q)}&source=${src}`);
+      const genresParam = gn.length > 0 ? `&genres=${encodeURIComponent(gn.join(","))}` : "";
+      const resp = await fetch(`${BACKEND_URL}/api/explorer/search?q=${encodeURIComponent(q)}&source=${src}${genresParam}`);
       if (!resp.ok) {
         throw new Error("Gagal mencari manga di katalog.");
       }
@@ -542,11 +573,32 @@ export default function MangaIDApp() {
     }
   };
 
-  const handleSelectManga = (manga: ExplorerManga) => {
+  const handleSelectManga = async (manga: ExplorerManga) => {
     setExplorerSelectedManga(manga);
     setExplorerChapterSearch("");
     setExplorerSortOrder("asc");
     loadMangaChapters(manga.id, explorerLang);
+
+    // If source is nhentai or manga has few tags, fetch full details asynchronously to populate all tags
+    if (manga.id.startsWith("nh-") || manga.tags.length <= 2) {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/explorer/manga/${encodeURIComponent(manga.id)}/details`);
+        if (resp.ok) {
+          const detailData: ExplorerManga = await resp.json();
+          setExplorerSelectedManga((current) => {
+            if (!current || current.id !== manga.id) return current;
+            return {
+              ...current,
+              tags: detailData.tags && detailData.tags.length > 0 ? detailData.tags : current.tags,
+              title: detailData.title || current.title,
+              description: detailData.description || current.description,
+            };
+          });
+        }
+      } catch (e) {
+        console.warn("Failed fetching manga full details:", e);
+      }
+    }
   };
 
   const handleDirectReadExplorerChapter = async (chapter: ExplorerChapter) => {
@@ -1210,12 +1262,8 @@ export default function MangaIDApp() {
 
   // Explorer filtered results by selected genres
   const filteredExplorerResults = useMemo(() => {
-    if (selectedGenres.length === 0) return explorerResults;
-    return explorerResults.filter((manga) => {
-      const combined = ((manga.tags || []).join(" ") + " " + (manga.title || "")).toLowerCase();
-      return selectedGenres.some((g) => combined.includes(g.toLowerCase()));
-    });
-  }, [explorerResults, selectedGenres]);
+    return explorerResults;
+  }, [explorerResults]);
 
   // Rename handlers
   const handleOpenRename = (target: RenameTarget) => {
@@ -2087,8 +2135,9 @@ export default function MangaIDApp() {
                           onClick={() => {
                             const newSrc = src.id as "mangadex" | "raw" | "komikindo" | "nhentai";
                             setExplorerSource(newSrc);
+                            setSelectedGenres([]);
                             if (explorerQuery.trim()) {
-                              handleSearchManga(explorerQuery, newSrc);
+                              handleSearchManga(explorerQuery, newSrc, []);
                             }
                           }}
                           className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer btn-press border ${
@@ -2117,15 +2166,14 @@ export default function MangaIDApp() {
                         />
                         <input
                           type="text"
-                          required
                           placeholder={
                             explorerSource === "raw"
-                              ? "Ketik judul manga RAW Jepang/Korea (contoh: Oshi no Ko, Jujutsu Kaisen, Frieren)..."
+                              ? "Ketik judul manga RAW Jepang/Korea atau pilih genre di bawah..."
                               : explorerSource === "nhentai"
-                              ? "Ketik judul doujinshi atau kode angka (contoh: 177013, Naruto, Romance)..."
+                              ? "Ketik judul/kode doujinshi atau pilih tag 18+ di bawah..."
                               : explorerSource === "komikindo"
-                              ? "Ketik judul komik bahasa Indonesia (contoh: Jujutsu Kaisen, Solo Leveling)..."
-                              : "Ketik judul manga global (contoh: One Piece, Jujutsu Kaisen, Chainsaw Man)..."
+                              ? "Ketik judul komik bahasa Indonesia atau pilih genre di bawah..."
+                              : "Ketik judul manga global atau pilih genre di bawah..."
                           }
                           value={explorerQuery}
                           onChange={(e) => setExplorerQuery(e.target.value)}
@@ -2134,9 +2182,9 @@ export default function MangaIDApp() {
                       </div>
                       <button
                         type="submit"
-                        disabled={explorerLoading || !explorerQuery.trim()}
+                        disabled={explorerLoading || (!explorerQuery.trim() && selectedGenres.length === 0)}
                         className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 flex-shrink-0 btn-press ${
-                          explorerQuery.trim() && !explorerLoading
+                          (explorerQuery.trim() || selectedGenres.length > 0) && !explorerLoading
                             ? "bg-[#E8452C] hover:bg-[#FF5A40] text-white cursor-pointer shadow-md shadow-[#E8452C]/20"
                             : "bg-[#1C1C1E] border border-[#2A2A2C] text-[#8E8B84] cursor-not-allowed"
                         }`}
@@ -2160,25 +2208,39 @@ export default function MangaIDApp() {
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-1.5 text-xs font-mono text-[#8E8B84]">
                           <Filter className="w-3.5 h-3.5 text-[#E8452C]" />
-                          <span>Filter Genre (Bisa Multi-Pilih):</span>
+                          <span>
+                            Filter {explorerSource === "nhentai" ? "Tag nhentai" : explorerSource === "komikindo" ? "Genre Komik Indo" : explorerSource === "raw" ? "Genre RAW Manga" : "Genre MangaDex"} (Multi-Pilih):
+                          </span>
                           {selectedGenres.length > 0 && (
                             <span className="px-1.5 py-0.2 rounded bg-[#E8452C] text-white text-[10px] font-bold">
-                              {selectedGenres.length} aktif
+                              {selectedGenres.length} dipilih
                             </span>
                           )}
                         </div>
-                        {selectedGenres.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedGenres([])}
-                            className="text-[11px] font-mono text-[#E8452C] hover:underline cursor-pointer"
-                          >
-                            Reset Genre
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {selectedGenres.length > 0 && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleSearchManga()}
+                                className="px-2.5 py-1 rounded-[4px] bg-[#E8452C] hover:bg-[#FF5A40] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                              >
+                                <Search className="w-3 h-3" />
+                                <span>Cari Genre Ini ({selectedGenres.length})</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedGenres([])}
+                                className="text-[11px] font-mono text-[#8E8B84] hover:text-[#E8452C] cursor-pointer"
+                              >
+                                Reset
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                        {AVAILABLE_GENRES.map((genre) => {
+                        {(SOURCE_GENRES[explorerSource] || []).map((genre) => {
                           const isSelected = selectedGenres.includes(genre);
                           return (
                             <button
@@ -3621,15 +3683,32 @@ export default function MangaIDApp() {
                     </p>
                   )}
                   {explorerSelectedManga.tags.length > 0 && (
-                    <div className="flex gap-1 flex-wrap mt-2">
-                      {explorerSelectedManga.tags.slice(0, 4).map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-1.5 py-0.5 rounded-[3px] bg-[#1C1C1E] text-[10px] text-[#8E8B84]"
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                    <div className="mt-2.5">
+                      <div className="text-[10px] font-mono text-[#8E8B84] mb-1.5 flex items-center gap-1">
+                        <Tag className="w-3 h-3 text-[#E8452C]" />
+                        <span>Genre & Tag ({explorerSelectedManga.tags.length}) — klik untuk cari genre ini:</span>
+                      </div>
+                      <div className="flex gap-1.5 flex-wrap max-h-24 sm:max-h-28 overflow-y-auto pr-1">
+                        {explorerSelectedManga.tags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => {
+                              const targetSource = (explorerSelectedManga.source as any) || "mangadex";
+                              setExplorerSource(targetSource);
+                              setExplorerSelectedManga(null);
+                              setExplorerQuery("");
+                              setSelectedGenres([tag]);
+                              handleSearchManga("", targetSource, [tag]);
+                            }}
+                            title={`Cari komik dengan genre/tag "${tag}"`}
+                            className="px-2 py-0.5 rounded-full bg-[#1C1C1E] border border-[#2A2A2C] hover:border-[#E8452C] hover:bg-[#E8452C]/15 text-[#A09D95] hover:text-[#ECE9E2] text-[10px] transition-all flex items-center gap-1 cursor-pointer group/tag btn-press"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#E8452C]/60 group-hover/tag:bg-[#E8452C]" />
+                            <span>{tag}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
