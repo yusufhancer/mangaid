@@ -31,40 +31,24 @@ if TAGS_FILE.exists():
     except Exception as e:
         logger.warning(f"Failed loading mangadex_tags.json: {e}")
 
+# Pure Indonesian & language synonyms mapping to canonical MangaDex tag names
 TAG_ALIASES = {
-    # Indonesian & synonyms mapping
     "reinkarnasi": "Reincarnation",
     "reinkarnasi ke dunia lain": "Isekai",
     "isekai reinkarnasi": "Isekai",
     "dunia lain": "Isekai",
     "reverse isekai": "Isekai",
-    "regresi": "Time Travel",
-    "regression": "Time Travel",
-    "regresi (regression)": "Time Travel",
     "perjalanan waktu": "Time Travel",
     "time loop": "Time Travel",
     "rebirth": "Reincarnation",
     "transmigrasi": "Reincarnation",
     "transmigration": "Reincarnation",
-    "kultivasi": "Wuxia",
-    "cultivation": "Wuxia",
-    "kultivasi abadi": "Wuxia",
-    "kultivasi iblis": "Wuxia",
-    "xianxia": "Wuxia",
-    "xuanhuan": "Wuxia",
-    "murim": "Martial Arts",
     "bela diri": "Martial Arts",
     "silat": "Martial Arts",
-    "silat dewa": "Martial Arts",
     "pencak silat": "Martial Arts",
     "sihir": "Magic",
     "penyihir": "Magic",
-    "sihir kuno": "Magic",
-    "akademi sihir": "Magic",
-    "magic academy": "Magic",
     "monster": "Monsters",
-    "monster tamer": "Monsters",
-    "monster taming": "Monsters",
     "monster girls": "Monster Girls",
     "iblis": "Demons",
     "raja iblis": "Demons",
@@ -77,65 +61,18 @@ TAG_ALIASES = {
     "dunia game": "Video Games",
     "virtual reality": "Virtual Reality",
     "game virtual": "Virtual Reality",
-    "leveling": "Video Games",
-    "system": "Video Games",
-    "system leveling": "Video Games",
-    "system hunter": "Video Games",
-    "solo leveling": "Video Games",
-    "solo player": "Video Games",
-    "hunter": "Action",
-    "hunters": "Action",
-    "dungeon": "Fantasy",
-    "dungeon master": "Fantasy",
-    "tower": "Fantasy",
-    "tower climbing": "Fantasy",
-    "necromancer": "Fantasy",
-    "dark fantasy": "Fantasy",
-    "romcom": "Romance",
-    "romance comedy": "Romance",
-    "romance comedy (romcom)": "Romance",
-    "komedi romantis": "Romance",
     "romantis": "Romance",
-    "romantis dewasa": "Romance",
-    "cinta segitiga": "Romance",
-    "overpowered": "Superhero",
-    "super power": "Superhero",
-    "op mc": "Superhero",
-    "overpowered (op mc)": "Superhero",
-    "superhero": "Superhero",
-    "school": "School Life",
-    "school life": "School Life",
+    "komedi": "Comedy",
     "kehidupan sekolah": "School Life",
+    "sekolah": "School Life",
     "high school": "School Life",
-    "akademi": "School Life",
-    "academy": "School Life",
-    "villainess": "Villainess",
-    "villainess redemption": "Villainess",
-    "otome game": "Villainess",
-    "otome isekai": "Villainess",
-    "villain": "Drama",
-    "balas dendam": "Tragedy",
-    "pembalasan dendam": "Tragedy",
-    "rencana balas dendam": "Tragedy",
-    "revenge": "Tragedy",
-    "betrayal": "Drama",
-    "kerajaan": "Historical",
-    "kingdom building": "Historical",
-    "royalty": "Historical",
-    "nobility": "Historical",
-    "aristokrasi": "Historical",
-    "militer": "Military",
-    "perang": "Military",
-    "war": "Military",
-    "polisi": "Police",
-    "detektif": "Mystery",
-    "misteri": "Mystery",
-    "misteri pembunuhan": "Mystery",
-    "dokter": "Medical",
+    "kantor": "Office Workers",
+    "pekerja kantor": "Office Workers",
     "medis": "Medical",
+    "dokter": "Medical",
     "masak": "Cooking",
-    "gourmet": "Cooking",
     "makanan": "Cooking",
+    "gourmet": "Cooking",
     "musik": "Music",
     "band": "Music",
     "idol": "Music",
@@ -144,22 +81,93 @@ TAG_ALIASES = {
     "sepak bola": "Sports",
     "hewan": "Animals",
     "pet": "Animals",
-    "healer": "Magic",
-    "healing": "Slice of Life",
-    "healing (iyashikei)": "Slice of Life",
-    "iyashikei": "Slice of Life",
     "zombie": "Zombies",
     "zombie apocalypse": "Zombies",
+    "vampir": "Vampires",
+    "tragedi": "Tragedy",
+    "misteri": "Mystery",
+    "psikologis": "Psychological",
+    "sejarah": "Historical",
+    "bertahan hidup": "Survival",
+    "pascakiamat": "Post-Apocalyptic",
     "apocalypse": "Post-Apocalyptic",
-    "post-apocalyptic survival": "Post-Apocalyptic",
-    "survival game": "Survival",
-    "death game": "Survival",
-    "komik warna": "Full Color",
     "warna": "Full Color",
+    "komik warna": "Full Color",
+    "full color": "Full Color",
+    "komik web": "Web Comic",
+    "web comic": "Web Comic",
     "webtoon": "Long Strip",
     "manhwa webtoon": "Long Strip",
     "manhwa indo": "Long Strip",
     "sub indo": "Adaptation",
+}
+
+# Specific genre handlers with targeted title search, tag constraints, and tag injection
+SPECIAL_GENRE_HANDLERS = {
+    # 1. Yuri
+    "yuri": {"tag": "Girls' Love", "exclude_tag": "Boys' Love", "inject": ["Yuri", "Girls' Love"]},
+    "shoujo ai": {"tag": "Girls' Love", "exclude_tag": "Boys' Love", "inject": ["Shoujo Ai", "Girls' Love"]},
+    "gl": {"tag": "Girls' Love", "exclude_tag": "Boys' Love", "inject": ["GL", "Girls' Love"]},
+    # 2. Yaoi
+    "yaoi": {"tag": "Boys' Love", "exclude_tag": "Girls' Love", "inject": ["Yaoi", "Boys' Love"]},
+    "shounen ai": {"tag": "Boys' Love", "exclude_tag": "Girls' Love", "inject": ["Shounen Ai", "Boys' Love"]},
+    "bl": {"tag": "Boys' Love", "exclude_tag": "Girls' Love", "inject": ["BL", "Boys' Love"]},
+    # 3. Romcom
+    "romcom": {"tag": "Romance", "tag2": "Comedy", "inject": ["Romcom", "Romance", "Comedy"]},
+    "romance comedy": {"tag": "Romance", "tag2": "Comedy", "inject": ["Romance Comedy", "Romance", "Comedy"]},
+    "romance comedy (romcom)": {"tag": "Romance", "tag2": "Comedy", "inject": ["Romcom", "Romance", "Comedy"]},
+    "komedi romantis": {"tag": "Romance", "tag2": "Comedy", "inject": ["Komedi Romantis", "Romance", "Comedy"]},
+    # 4. Murim
+    "murim": {"title": "Murim", "lang": "ko", "inject": ["Murim", "Manhwa", "Martial Arts"]},
+    # 5. Cultivation
+    "cultivation": {"tag": "Wuxia", "title": "Cultivation", "inject": ["Cultivation", "Wuxia"]},
+    "kultivasi": {"tag": "Wuxia", "title": "Cultivation", "inject": ["Kultivasi", "Wuxia"]},
+    "kultivasi abadi": {"tag": "Wuxia", "title": "Cultivation", "inject": ["Kultivasi Abadi", "Wuxia"]},
+    "kultivasi iblis": {"tag": "Wuxia", "title": "Cultivation", "inject": ["Kultivasi Iblis", "Wuxia"]},
+    "xianxia": {"tag": "Wuxia", "title": "Xianxia", "inject": ["Xianxia", "Wuxia"]},
+    "xuanhuan": {"tag": "Wuxia", "title": "Xuanhuan", "inject": ["Xuanhuan", "Wuxia"]},
+    # 6. Necromancer
+    "necromancer": {"title": "Necromancer", "inject": ["Necromancer", "Fantasy"]},
+    # 7. Leveling
+    "leveling": {"title": "Leveling", "inject": ["Leveling"]},
+    "solo leveling": {"title": "Solo Leveling", "inject": ["Solo Leveling"]},
+    "system leveling": {"title": "Leveling", "inject": ["System Leveling"]},
+    # 8. Dungeon
+    "dungeon": {"title": "Dungeon", "inject": ["Dungeon", "Fantasy"]},
+    "dungeon master": {"title": "Dungeon", "inject": ["Dungeon Master", "Fantasy"]},
+    # 9. Tower
+    "tower": {"title": "Tower", "inject": ["Tower"]},
+    "tower climbing": {"title": "Tower", "inject": ["Tower Climbing"]},
+    # 10. System
+    "system": {"title": "System", "inject": ["System"]},
+    "system hunter": {"title": "System", "inject": ["System Hunter"]},
+    # 11. Otome
+    "otome": {"tag": "Villainess", "title": "Otome", "inject": ["Otome", "Villainess"]},
+    "otome game": {"tag": "Villainess", "title": "Otome", "inject": ["Otome Game", "Villainess"]},
+    "otome isekai": {"tag": "Villainess", "title": "Otome", "inject": ["Otome Isekai", "Villainess"]},
+    # 12. Villainess
+    "villainess": {"tag": "Villainess", "inject": ["Villainess"]},
+    "villainess redemption": {"tag": "Villainess", "inject": ["Villainess Redemption"]},
+    # 13. Regression
+    "regression": {"title": "Regression", "tag": "Time Travel", "inject": ["Regression", "Time Travel"]},
+    "regresi": {"title": "Regression", "tag": "Time Travel", "inject": ["Regresi", "Time Travel"]},
+    "regresi (regression)": {"title": "Regression", "tag": "Time Travel", "inject": ["Regresi", "Time Travel"]},
+    # 14. Revenge
+    "revenge": {"title": "Revenge", "inject": ["Revenge"]},
+    "balas dendam": {"title": "Revenge", "inject": ["Balas Dendam"]},
+    "pembalasan dendam": {"title": "Revenge", "inject": ["Pembalasan Dendam"]},
+    # 15. Overpowered
+    "overpowered": {"title": "Overpowered", "inject": ["Overpowered"]},
+    "overpowered (op mc)": {"title": "Overpowered", "inject": ["Overpowered (OP MC)"]},
+    "op mc": {"title": "Overpowered", "inject": ["OP MC"]},
+    # 16. Hunter
+    "hunter": {"title": "Hunter", "inject": ["Hunter"]},
+    "hunters": {"title": "Hunter", "inject": ["Hunters"]},
+    # 17. Academy
+    "academy": {"title": "Academy", "tag": "School Life", "inject": ["Academy", "School Life"]},
+    "akademi": {"title": "Academy", "tag": "School Life", "inject": ["Akademi", "School Life"]},
+    "magic academy": {"title": "Academy", "tag": "Magic", "inject": ["Magic Academy", "Magic"]},
+    "akademi sihir": {"title": "Academy", "tag": "Magic", "inject": ["Akademi Sihir", "Magic"]},
 }
 
 def get_mangadex_tag_id(name: str) -> Optional[str]:
@@ -173,37 +181,170 @@ def get_mangadex_tag_id(name: str) -> Optional[str]:
             return tag_id
     return None
 
-def apply_mangadex_filters(params: list, genres: Optional[str]) -> List[str]:
+def apply_mangadex_filters(params: list, genres: Optional[str]):
+    """
+    Applies demographic, format, tag filters, and special handlers.
+    Returns: (unmatched_keywords: List[str], inject_tags: List[str], title_override: Optional[str])
+    """
     unmatched_keywords = []
+    inject_tags = []
+    title_override = None
+
     if not genres:
-        return unmatched_keywords
+        return unmatched_keywords, inject_tags, title_override
+
     for g in genres.split(","):
         g_clean = g.strip()
         if not g_clean:
             continue
         g_lower = g_clean.lower()
+
+        # 1. Check special genre handler first
+        if g_lower in SPECIAL_GENRE_HANDLERS:
+            h = SPECIAL_GENRE_HANDLERS[g_lower]
+            if "inject" in h:
+                inject_tags.extend(h["inject"])
+            if "tag" in h:
+                tid = MANGADEX_TAGS_MAP.get(h["tag"])
+                if tid and ("includedTags[]", tid) not in params:
+                    params.append(("includedTags[]", tid))
+            if "tag2" in h:
+                tid2 = MANGADEX_TAGS_MAP.get(h["tag2"])
+                if tid2 and ("includedTags[]", tid2) not in params:
+                    params.append(("includedTags[]", tid2))
+            if "exclude_tag" in h:
+                etid = MANGADEX_TAGS_MAP.get(h["exclude_tag"])
+                if etid and ("excludedTags[]", etid) not in params:
+                    params.append(("excludedTags[]", etid))
+            if "lang" in h:
+                if ("originalLanguage[]", h["lang"]) not in params:
+                    params.append(("originalLanguage[]", h["lang"]))
+            if "title" in h and not title_override:
+                title_override = h["title"]
+            continue
+
+        # 2. Demographic
         if g_lower in ("shounen", "shoujo", "seinen", "josei"):
             params.append(("publicationDemographic[]", g_lower))
+            inject_tags.append(g_clean)
+        # 3. Origin
         elif g_lower in ("manhwa", "korean", "raw korea", "🇰🇷 raw korea"):
             params.append(("originalLanguage[]", "ko"))
+            inject_tags.append("Manhwa")
         elif g_lower in ("manhua", "chinese", "raw china", "🇨🇳 raw china"):
             params.append(("originalLanguage[]", "zh"))
+            inject_tags.append("Manhua")
         elif g_lower in ("manga", "japanese", "raw jepang", "🇯🇵 raw jepang"):
             params.append(("originalLanguage[]", "ja"))
+            inject_tags.append("Manga")
+        # 4. Rating
         elif g_lower in ("ecchi", "erotica"):
             if ("contentRating[]", "erotica") not in params:
                 params.append(("contentRating[]", "erotica"))
+            inject_tags.append("Ecchi")
         elif g_lower == "safe":
             params.append(("contentRating[]", "safe"))
         elif g_lower == "suggestive":
             params.append(("contentRating[]", "suggestive"))
+        # 5. Tag Map
         else:
             tag_id = get_mangadex_tag_id(g_clean)
             if tag_id:
-                params.append(("includedTags[]", tag_id))
+                if ("includedTags[]", tag_id) not in params:
+                    params.append(("includedTags[]", tag_id))
+                inject_tags.append(g_clean)
             else:
                 unmatched_keywords.append(g_clean)
-    return unmatched_keywords
+                inject_tags.append(g_clean)
+
+    return unmatched_keywords, inject_tags, title_override
+
+def validate_manga_matches_genres(
+    searched_genres: List[str],
+    tags: List[str],
+    title: str,
+    desc: Optional[str] = None,
+    orig_lang: Optional[str] = None
+) -> bool:
+    """
+    Guarantees that a returned manga genuinely satisfies ALL searched genres.
+    Rejects false positives (e.g. SPY x FAMILY for Murim, or Boys' Love for Yuri).
+    """
+    title_l = (title or "").lower()
+    desc_l = (desc or "").lower()
+    tags_l = [t.lower() for t in tags]
+
+    for g in searched_genres:
+        gl = g.lower().strip()
+        if not gl:
+            continue
+
+        # 1. Yuri / Girls' Love
+        if gl in ("yuri", "shoujo ai", "gl", "girls' love"):
+            if "boys' love" in tags_l or "yaoi" in tags_l:
+                return False
+            if "girls' love" not in tags_l and "yuri" not in tags_l and "yuri" not in title_l:
+                return False
+
+        # 2. Yaoi / Boys' Love
+        elif gl in ("yaoi", "shounen ai", "bl", "boys' love"):
+            if "girls' love" in tags_l or "yuri" in tags_l:
+                return False
+            if "boys' love" not in tags_l and "yaoi" not in tags_l and "yaoi" not in title_l:
+                return False
+
+        # 3. Murim
+        elif gl == "murim":
+            is_murim = (
+                "murim" in title_l
+                or "murim" in desc_l
+                or (orig_lang in ("ko", "zh") and any(t in ("martial arts", "wuxia") for t in tags_l))
+            )
+            if not is_murim or (orig_lang == "ja" and "murimuri" in title_l):
+                return False
+
+        # 4. Cultivation / Kultivasi
+        elif gl in ("cultivation", "kultivasi", "xianxia", "xuanhuan"):
+            is_cult = (
+                "wuxia" in tags_l
+                or any(k in title_l or k in desc_l for k in ("cultivat", "xianxia", "xuanhuan", "immortal", "daoist", "sect master", "spirit root"))
+            )
+            if not is_cult:
+                return False
+
+        # 5. Necromancer
+        elif gl == "necromancer":
+            if "necromanc" not in title_l and "necromanc" not in desc_l:
+                return False
+
+        # 6. Leveling
+        elif gl in ("leveling", "solo leveling", "system leveling"):
+            if "level" not in title_l and "level" not in desc_l:
+                return False
+
+        # 7. Dungeon
+        elif gl in ("dungeon", "dungeon master"):
+            if "dungeon" not in title_l and "labyrinth" not in title_l and "dungeon" not in desc_l:
+                return False
+
+        # 8. Tower
+        elif gl in ("tower", "tower climbing"):
+            if "tower" not in title_l and "tower" not in desc_l:
+                return False
+
+        # 9. Villainess
+        elif gl in ("villainess", "villainess redemption"):
+            if "villainess" not in tags_l and "akuyaku" not in title_l and "villainess" not in title_l:
+                return False
+
+        # 10. General tags: verify tag or title contains it
+        else:
+            tag_match = any(gl == t or gl in t for t in tags_l)
+            text_match = bool(re.search(r"\b" + re.escape(gl) + r"\b", title_l)) or gl in desc_l
+            if not (tag_match or text_match):
+                return False
+
+    return True
 
 class ExplorerMangaItem(BaseModel):
     id: str
@@ -229,19 +370,23 @@ class ExplorerChapterItem(BaseModel):
     source: str = "mangadex"
 
 async def _search_mangadex(q: str, limit: int, genres: Optional[str] = None) -> List[ExplorerMangaItem]:
+    fetch_limit = min(limit * 2, 50) if genres else limit
     params = [
-        ("limit", str(limit)),
+        ("limit", str(fetch_limit)),
         ("includes[]", "cover_art"),
         ("contentRating[]", "safe"),
         ("contentRating[]", "suggestive"),
         ("contentRating[]", "erotica"),
     ]
 
-    unmatched = apply_mangadex_filters(params, genres)
+    unmatched, inject_tags, title_override = apply_mangadex_filters(params, genres)
 
     if q.strip():
         search_query = f"{q.strip()} {' '.join(unmatched)}".strip()
         params.append(("title", search_query))
+        params.append(("order[relevance]", "desc"))
+    elif title_override:
+        params.append(("title", title_override))
         params.append(("order[relevance]", "desc"))
     elif unmatched:
         params.append(("title", " ".join(unmatched)))
@@ -254,10 +399,13 @@ async def _search_mangadex(q: str, limit: int, genres: Optional[str] = None) -> 
         resp.raise_for_status()
         data = resp.json()
 
+    searched_list = [g.strip() for g in genres.split(",") if g.strip()] if genres else []
+
     results = []
     for item in data.get("data", []):
         m_id = item.get("id")
         attr = item.get("attributes", {})
+        orig_lang = attr.get("originalLanguage", "ja")
         t_dict = attr.get("title", {})
         title = None
         if isinstance(t_dict, dict) and t_dict:
@@ -276,12 +424,29 @@ async def _search_mangadex(q: str, limit: int, genres: Optional[str] = None) -> 
         if isinstance(desc_dict, dict) and desc_dict:
             desc = desc_dict.get("en") or next(iter(desc_dict.values()), None)
 
-        # Extract all tags without truncation
-        tags = []
+        # Extract all tags
+        raw_tags = []
         for t in attr.get("tags", []):
             t_name = t.get("attributes", {}).get("name", {}).get("en")
-            if t_name and t_name not in tags:
-                tags.append(t_name)
+            if t_name and t_name not in raw_tags:
+                raw_tags.append(t_name)
+
+        # Validate that this manga genuinely matches all searched genres
+        if searched_list:
+            if not validate_manga_matches_genres(searched_list, raw_tags, title, desc, orig_lang):
+                continue
+
+        # Enrich tags so that the searched genres are prominent and present
+        final_tags = []
+        for g_s in searched_list:
+            if g_s not in final_tags:
+                final_tags.append(g_s)
+        for g_inj in inject_tags:
+            if g_inj not in final_tags:
+                final_tags.append(g_inj)
+        for t in raw_tags:
+            if t not in final_tags:
+                final_tags.append(t)
 
         cover_url = None
         for rel in item.get("relationships", []):
@@ -299,15 +464,20 @@ async def _search_mangadex(q: str, limit: int, genres: Optional[str] = None) -> 
             status=attr.get("status"),
             year=attr.get("year"),
             cover_url=cover_url,
-            tags=tags,
+            tags=final_tags,
             source="mangadex",
             original_url=f"https://mangadex.org/title/{m_id}"
         ))
+
+        if len(results) >= limit:
+            break
+
     return results
 
 async def _search_raw_manga(q: str, limit: int, genres: Optional[str] = None) -> List[ExplorerMangaItem]:
+    fetch_limit = min(limit * 2, 50) if genres else limit
     params = [
-        ("limit", str(limit)),
+        ("limit", str(fetch_limit)),
         ("originalLanguage[]", "ja"),
         ("originalLanguage[]", "ko"),
         ("includes[]", "cover_art"),
@@ -316,11 +486,14 @@ async def _search_raw_manga(q: str, limit: int, genres: Optional[str] = None) ->
         ("contentRating[]", "erotica"),
     ]
 
-    unmatched = apply_mangadex_filters(params, genres)
+    unmatched, inject_tags, title_override = apply_mangadex_filters(params, genres)
 
     if q.strip():
         search_query = f"{q.strip()} {' '.join(unmatched)}".strip()
         params.append(("title", search_query))
+        params.append(("order[relevance]", "desc"))
+    elif title_override:
+        params.append(("title", title_override))
         params.append(("order[relevance]", "desc"))
     elif unmatched:
         params.append(("title", " ".join(unmatched)))
@@ -332,6 +505,8 @@ async def _search_raw_manga(q: str, limit: int, genres: Optional[str] = None) ->
         resp = await client.get(f"{MANGADEX_API_BASE}/manga", params=params)
         resp.raise_for_status()
         data = resp.json()
+
+    searched_list = [g.strip() for g in genres.split(",") if g.strip()] if genres else []
 
     results = []
     for item in data.get("data", []):
@@ -359,11 +534,28 @@ async def _search_raw_manga(q: str, limit: int, genres: Optional[str] = None) ->
         lang_label = "🇯🇵 RAW Jepang" if orig_lang == "ja" else ("🇰🇷 RAW Korea" if orig_lang == "ko" else "🇨🇳 RAW China")
 
         # Extract all tags
-        tags = [lang_label, "RAW"]
+        raw_tags = [lang_label, "RAW"]
         for t in attr.get("tags", []):
             t_name = t.get("attributes", {}).get("name", {}).get("en")
-            if t_name and t_name not in tags:
-                tags.append(t_name)
+            if t_name and t_name not in raw_tags:
+                raw_tags.append(t_name)
+
+        # Validate that this manga genuinely matches all searched genres
+        if searched_list:
+            if not validate_manga_matches_genres(searched_list, raw_tags, title, desc, orig_lang):
+                continue
+
+        # Enrich tags with matched and injected tags at the very front
+        final_tags = []
+        for g_s in searched_list:
+            if g_s not in final_tags:
+                final_tags.append(g_s)
+        for g_inj in inject_tags:
+            if g_inj not in final_tags:
+                final_tags.append(g_inj)
+        for t in raw_tags:
+            if t not in final_tags:
+                final_tags.append(t)
 
         cover_url = None
         for rel in item.get("relationships", []):
@@ -381,28 +573,36 @@ async def _search_raw_manga(q: str, limit: int, genres: Optional[str] = None) ->
             status=attr.get("status"),
             year=attr.get("year"),
             cover_url=cover_url,
-            tags=tags,
+            tags=final_tags,
             source="raw",
             original_url=f"https://mangadex.org/title/{m_id}"
         ))
+
+        if len(results) >= limit:
+            break
+
     return results
 
 async def _search_komikindo(q: str, limit: int, genres: Optional[str] = None) -> List[ExplorerMangaItem]:
     # Fallback to MangaDex Indonesian-translated catalog
     try:
+        fetch_limit = min(limit * 2, 50) if genres else limit
         params = [
-            ("limit", str(limit)),
+            ("limit", str(fetch_limit)),
             ("availableTranslatedLanguage[]", "id"),
             ("includes[]", "cover_art"),
             ("contentRating[]", "safe"),
             ("contentRating[]", "suggestive"),
         ]
 
-        unmatched = apply_mangadex_filters(params, genres)
+        unmatched, inject_tags, title_override = apply_mangadex_filters(params, genres)
 
         if q.strip():
             search_query = f"{q.strip()} {' '.join(unmatched)}".strip()
             params.append(("title", search_query))
+            params.append(("order[relevance]", "desc"))
+        elif title_override:
+            params.append(("title", title_override))
             params.append(("order[relevance]", "desc"))
         elif unmatched:
             params.append(("title", " ".join(unmatched)))
@@ -414,16 +614,46 @@ async def _search_komikindo(q: str, limit: int, genres: Optional[str] = None) ->
             resp = await client.get(f"{MANGADEX_API_BASE}/manga", params=params)
             if resp.status_code == 200:
                 data = resp.json()
+                searched_list = [g.strip() for g in genres.split(",") if g.strip()] if genres else []
                 results = []
                 for item in data.get("data", []):
                     m_id = item.get("id")
                     attr = item.get("attributes", {})
+                    orig_lang = attr.get("originalLanguage", "")
                     t_dict = attr.get("title", {})
                     title = None
                     if isinstance(t_dict, dict) and t_dict:
                         title = t_dict.get("en") or t_dict.get("ja-ro") or next(iter(t_dict.values()), None)
                     if not title:
                         title = "Untitled Manga"
+
+                    desc_dict = attr.get("description", {})
+                    desc = None
+                    if isinstance(desc_dict, dict) and desc_dict:
+                        desc = desc_dict.get("en") or next(iter(desc_dict.values()), None)
+
+                    raw_tags = ["Sub Indo", "Bahasa ID"]
+                    for t in attr.get("tags", []):
+                        t_name = t.get("attributes", {}).get("name", {}).get("en")
+                        if t_name and t_name not in raw_tags:
+                            raw_tags.append(t_name)
+
+                    # Validate that this manga genuinely matches all searched genres
+                    if searched_list:
+                        if not validate_manga_matches_genres(searched_list, raw_tags, title, desc, orig_lang):
+                            continue
+
+                    # Enrich tags with matched and injected tags at the very front
+                    final_tags = []
+                    for g_s in searched_list:
+                        if g_s not in final_tags:
+                            final_tags.append(g_s)
+                    for g_inj in inject_tags:
+                        if g_inj not in final_tags:
+                            final_tags.append(g_inj)
+                    for t in raw_tags:
+                        if t not in final_tags:
+                            final_tags.append(t)
 
                     cover_url = None
                     for rel in item.get("relationships", []):
@@ -434,23 +664,21 @@ async def _search_komikindo(q: str, limit: int, genres: Optional[str] = None) ->
                                 cover_url = f"/api/proxy/image?url={quote(raw_cover, safe='')}"
                             break
 
-                    tags = ["Sub Indo", "Bahasa ID"]
-                    for t in attr.get("tags", []):
-                        t_name = t.get("attributes", {}).get("name", {}).get("en")
-                        if t_name and t_name not in tags:
-                            tags.append(t_name)
-
                     results.append(ExplorerMangaItem(
                         id=m_id,
                         title=title,
-                        description="Tersedia Bab Bahasa Indonesia (Scanlation Indo)",
+                        description=desc or "Tersedia Bab Bahasa Indonesia (Scanlation Indo)",
                         status=attr.get("status"),
                         year=attr.get("year"),
                         cover_url=cover_url,
-                        tags=tags,
+                        tags=final_tags,
                         source="komikindo",
                         original_url=f"https://mangadex.org/title/{m_id}"
                     ))
+
+                    if len(results) >= limit:
+                        break
+
                 return results
     except Exception as e:
         logger.warning(f"Indonesian fallback search error: {e}")
@@ -644,6 +872,35 @@ async def get_manga_details(manga_id: str):
                         t_name = t.get("attributes", {}).get("name", {}).get("en")
                         if t_name and t_name not in tags:
                             tags.append(t_name)
+
+                    # Enrich with recognizable sub-genres and synonyms
+                    title_l = title.lower()
+                    desc_l = (desc or "").lower()
+                    orig_lang = attr.get("originalLanguage", "")
+                    if "murim" in title_l or "murim" in desc_l or (orig_lang in ("ko", "zh") and any(t.lower() in ("martial arts", "wuxia") for t in tags)):
+                        if "Murim" not in tags:
+                            tags.insert(0, "Murim")
+                    if "cultivat" in title_l or "cultivat" in desc_l or "Wuxia" in tags:
+                        if "Cultivation" not in tags:
+                            tags.insert(0, "Cultivation")
+                    if "necromanc" in title_l or "necromanc" in desc_l:
+                        if "Necromancer" not in tags:
+                            tags.insert(0, "Necromancer")
+                    if "level" in title_l or "level" in desc_l:
+                        if "Leveling" not in tags:
+                            tags.insert(0, "Leveling")
+                    if "dungeon" in title_l or "dungeon" in desc_l or "labyrinth" in title_l:
+                        if "Dungeon" not in tags:
+                            tags.insert(0, "Dungeon")
+                    if "tower" in title_l or "tower" in desc_l:
+                        if "Tower" not in tags:
+                            tags.insert(0, "Tower")
+                    if "Girls' Love" in tags and "Yuri" not in tags:
+                        tags.insert(0, "Yuri")
+                    if "Boys' Love" in tags and "Yaoi" not in tags:
+                        tags.insert(0, "Yaoi")
+                    if "Reincarnation" in tags and "Reinkarnasi" not in tags:
+                        tags.append("Reinkarnasi")
                     cover_file = None
                     for rel in item.get("relationships", []):
                         if rel.get("type") == "cover_art":

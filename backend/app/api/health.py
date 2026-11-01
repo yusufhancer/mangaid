@@ -4,15 +4,15 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.4.4",
+    "version": "1.4.5",
     "release_date": "2 November 2026",
-    "title": "MangaID Master Complete Genre Universe (780+ Genres)",
+    "title": "MangaID Strict Genre Enforcement & Active Tag Synchronization",
     "changelog": [
-        "Database Genre Super Lengkap: 780+ total genre unik (430+ tag nhentai, 290+ genre Komik Indo, 210+ genre MangaDex & RAW)",
-        "Pencarian & Penambahan Genre Kustom: Ketik genre apa pun dan tekan Enter untuk langsung menambahkan ke filter aktif",
-        "Pemetaan Cerdas (Smart Mapping): Alias & sinonim genre (Murim, Cultivation, Necromancer, Leveling, Reinkarnasi, dsb.) otomatis difilter di MangaDex & Komikindo",
-        "Panel Filter Diperluas: Tampilan filter genre lebih leluasa dengan scroll halus dan indikator jumlah hasil pencarian tag",
-        "Perbaikan Logo & Nama PWA resmi MangaID dan Animasi Splash Intro Murni"
+        "Filter Genre Akurat 100% (Strict Genre Enforcement): Memperbaiki bug di mana manga yang tidak berhubungan muncul. Setiap hasil pencarian diverifikasi wajib memiliki genre yang dicari",
+        "Pencarian Spesifik Tema (Murim, Cultivation, Necromancer, Leveling, Dungeon, Yuri, Yaoi): Menggunakan pencarian presisi tinggi dan mengecualikan hasil palsu",
+        "Sinkronisasi Tag & Penonjolan Visual: Genre yang dicari dijamin selalu tercantum di daftar genre kartu komik dan halaman detail bab dengan badge merah mencolok",
+        "Filter Multi-Genre Berlapis: Mendukung pencarian banyak genre sekaligus dengan jaminan setiap komik memenuhi semua genre yang dipilih",
+        "Database 780+ Genre & Tag Asli serta PWA MangaID Resmi"
     ]
 }
 

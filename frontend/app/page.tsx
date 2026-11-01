@@ -1722,9 +1722,10 @@ export default function MangaIDApp() {
           const detailData: ExplorerManga = await resp.json();
           setExplorerSelectedManga((current) => {
             if (!current || current.id !== manga.id) return current;
+            const mergedTags = Array.from(new Set([...current.tags, ...(detailData.tags || [])]));
             return {
               ...current,
-              tags: detailData.tags && detailData.tags.length > 0 ? detailData.tags : current.tags,
+              tags: mergedTags,
               title: detailData.title || current.title,
               description: detailData.description || current.description,
             };
@@ -2537,8 +2538,24 @@ export default function MangaIDApp() {
 
   // Explorer filtered results by selected genres
   const filteredExplorerResults = useMemo(() => {
-    return explorerResults;
-  }, [explorerResults]);
+    if (selectedGenres.length === 0) return explorerResults;
+    return explorerResults.filter((manga) => {
+      const tagsLower = (manga.tags || []).map((t) => t.toLowerCase());
+      const titleLower = (manga.title || "").toLowerCase();
+      const descLower = (manga.description || "").toLowerCase();
+
+      return selectedGenres.every((genre) => {
+        const gl = genre.toLowerCase().trim();
+        if (!gl) return true;
+        // Check tag match
+        const inTags = tagsLower.some((t) => t === gl || t.includes(gl) || gl.includes(t));
+        if (inTags) return true;
+        // Check word in title or description
+        const inText = titleLower.includes(gl) || descLower.includes(gl);
+        return inText;
+      });
+    });
+  }, [explorerResults, selectedGenres]);
 
   // Rename handlers
   const handleOpenRename = (target: RenameTarget) => {
@@ -3760,11 +3777,25 @@ export default function MangaIDApp() {
                                   >
                                     {manga.title}
                                   </h4>
-                                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#8E8B84] mt-1">
-                                    {manga.year && <span>{manga.year}</span>}
-                                    {manga.tags[0] && (
-                                      <span>• {manga.tags[0]}</span>
+                                  <div className="flex items-center gap-1 flex-wrap mt-1.5">
+                                    {manga.year && (
+                                      <span className="text-[10px] font-mono text-[#8E8B84] mr-1">{manga.year}</span>
                                     )}
+                                    {manga.tags.slice(0, 3).map((t) => {
+                                      const isMatched = selectedGenres.some(sg => sg.toLowerCase() === t.toLowerCase());
+                                      return (
+                                        <span
+                                          key={t}
+                                          className={`px-1.5 py-0.5 rounded-[3px] text-[9px] font-mono ${
+                                            isMatched
+                                              ? "bg-[#E8452C] text-white font-bold"
+                                              : "bg-[#1C1C1E] text-[#8E8B84] border border-[#2A2A2C]"
+                                          }`}
+                                        >
+                                          {t}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                 </div>
 
@@ -5113,25 +5144,32 @@ export default function MangaIDApp() {
                         <span>Genre & Tag ({explorerSelectedManga.tags.length}) — klik untuk cari genre ini:</span>
                       </div>
                       <div className="flex gap-1.5 flex-wrap max-h-24 sm:max-h-28 overflow-y-auto pr-1">
-                        {explorerSelectedManga.tags.map((tag) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => {
-                              const targetSource = (explorerSelectedManga.source as any) || "mangadex";
-                              setExplorerSource(targetSource);
-                              setExplorerSelectedManga(null);
-                              setExplorerQuery("");
-                              setSelectedGenres([tag]);
-                              handleSearchManga("", targetSource, [tag]);
-                            }}
-                            title={`Cari komik dengan genre/tag "${tag}"`}
-                            className="px-2 py-0.5 rounded-full bg-[#1C1C1E] border border-[#2A2A2C] hover:border-[#E8452C] hover:bg-[#E8452C]/15 text-[#A09D95] hover:text-[#ECE9E2] text-[10px] transition-all flex items-center gap-1 cursor-pointer group/tag btn-press"
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#E8452C]/60 group-hover/tag:bg-[#E8452C]" />
-                            <span>{tag}</span>
-                          </button>
-                        ))}
+                        {explorerSelectedManga.tags.map((tag) => {
+                          const isMatched = selectedGenres.some((sg) => sg.toLowerCase() === tag.toLowerCase());
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => {
+                                const targetSource = (explorerSelectedManga.source as any) || "mangadex";
+                                setExplorerSource(targetSource);
+                                setExplorerSelectedManga(null);
+                                setExplorerQuery("");
+                                setSelectedGenres([tag]);
+                                handleSearchManga("", targetSource, [tag]);
+                              }}
+                              title={`Cari komik dengan genre/tag "${tag}"`}
+                              className={`px-2.5 py-1 rounded-full text-[10px] transition-all flex items-center gap-1 cursor-pointer group/tag btn-press ${
+                                isMatched
+                                  ? "bg-[#E8452C] border border-[#E8452C] text-white font-bold shadow-sm"
+                                  : "bg-[#1C1C1E] border border-[#2A2A2C] hover:border-[#E8452C] hover:bg-[#E8452C]/15 text-[#A09D95] hover:text-[#ECE9E2]"
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${isMatched ? "bg-white" : "bg-[#E8452C]/60 group-hover/tag:bg-[#E8452C]"}`} />
+                              <span>{tag}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
