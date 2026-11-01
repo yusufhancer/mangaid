@@ -32,19 +32,21 @@ from backend.app.api.proxy import router as proxy_router
 setup_logging()
 init_db()
 
-# 5. Launch Gradio with allowed paths, non-blocking to attach FastAPI routers
+# 5. Launch Gradio with SSR disabled so Python directly owns port 7860
 server_app, local_url, share_url = demo.queue().launch(
     server_name="0.0.0.0",
     server_port=7860,
     prevent_thread_lock=True,
+    ssr_mode=False,
     allowed_paths=[str(frontend_out)] if frontend_out.exists() else []
 )
 
-# 6. Mount backend routers to both /api and /manga_api on the running FastAPI instance
+# 6. Mount backend routers to /api, /manga_api, and /gradio_api/manga_api
 routers = [health_router, ingest_router, jobs_router, chapters_router, explorer_router, proxy_router]
 for r in routers:
     server_app.include_router(r, prefix="/api")
     server_app.include_router(r, prefix="/manga_api")
+    server_app.include_router(r, prefix="/gradio_api/manga_api")
 
 # 7. Keep process alive
 demo.block_thread()
