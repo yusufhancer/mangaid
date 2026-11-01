@@ -16,3 +16,4 @@ pypdfium2>=4.28.0
 python-multipart>=0.0.9
 edge-tts>=7.2.8
 gradio>=5.0.0
+spaces

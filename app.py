@@ -3,6 +3,14 @@ from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 import gradio as gr
 
+try:
+    import spaces
+    @spaces.GPU
+    def gpu_service_check():
+        return True
+except Exception:
+    pass
+
 from backend.app.main import app as fastapi_app
 
 # Path to built Next.js static frontend
