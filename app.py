@@ -18,7 +18,7 @@ with gr.Blocks(title="MangaID Universal AI Translator", css="footer {display: no
     txt = gr.Textbox(visible=False)
     btn.click(fn=gpu_health, inputs=[txt], outputs=[txt])
 
-# 4. Mount Backend Routers & Database
+# 4. Backend Database & Logging Init
 from backend.app.core.config import settings
 from backend.app.core.logging import setup_logging
 from backend.app.db.session import init_db
@@ -32,16 +32,19 @@ from backend.app.api.proxy import router as proxy_router
 setup_logging()
 init_db()
 
-demo.app.include_router(health_router, prefix="/manga_api")
-demo.app.include_router(ingest_router, prefix="/manga_api")
-demo.app.include_router(jobs_router, prefix="/manga_api")
-demo.app.include_router(chapters_router, prefix="/manga_api")
-demo.app.include_router(explorer_router, prefix="/manga_api")
-demo.app.include_router(proxy_router, prefix="/manga_api")
-
-# 5. Launch Gradio with allowed paths
-demo.queue().launch(
+# 5. Launch Gradio with allowed paths, non-blocking to attach FastAPI routers
+server_app, local_url, share_url = demo.queue().launch(
     server_name="0.0.0.0",
     server_port=7860,
+    prevent_thread_lock=True,
     allowed_paths=[str(frontend_out)] if frontend_out.exists() else []
 )
+
+# 6. Mount backend routers to both /api and /manga_api on the running FastAPI instance
+routers = [health_router, ingest_router, jobs_router, chapters_router, explorer_router, proxy_router]
+for r in routers:
+    server_app.include_router(r, prefix="/api")
+    server_app.include_router(r, prefix="/manga_api")
+
+# 7. Keep process alive
+demo.block_thread()
