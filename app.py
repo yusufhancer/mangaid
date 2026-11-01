@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import gradio as gr
 import spaces
 
@@ -11,9 +13,9 @@ def gpu_health(x):
 # 2. Paths
 frontend_out = Path(__file__).resolve().parent / "frontend" / "out"
 
-# 3. Gradio Blocks UI (Full-screen clean MangaID)
+# 3. Gradio Blocks UI (Full-screen clean MangaID frame)
 with gr.Blocks(title="MangaID Universal AI Translator", css="footer {display: none !important;} .gradio-container {padding: 0 !important; max-width: 100% !important;}") as demo:
-    gr.HTML('<iframe src="/gradio_api/file=frontend/out/index.html" style="position:fixed; top:0; left:0; width:100%; height:100%; border:none; margin:0; padding:0; z-index:999999;"></iframe>')
+    gr.HTML('<iframe src="/index.html" style="position:fixed; top:0; left:0; width:100%; height:100%; border:none; margin:0; padding:0; z-index:999999;"></iframe>')
     btn = gr.Button("Ping", visible=False)
     txt = gr.Textbox(visible=False)
     btn.click(fn=gpu_health, inputs=[txt], outputs=[txt])
@@ -48,5 +50,32 @@ for r in routers:
     server_app.include_router(r, prefix="/manga_api")
     server_app.include_router(r, prefix="/gradio_api/manga_api")
 
-# 7. Keep process alive
+# 7. Mount Next.js static assets (_next, icons, logo, html)
+if (frontend_out / "_next").exists():
+    server_app.mount("/_next", StaticFiles(directory=str(frontend_out / "_next")), name="next_assets")
+
+if (frontend_out / "icons").exists():
+    server_app.mount("/icons", StaticFiles(directory=str(frontend_out / "icons")), name="icons_assets")
+
+@server_app.get("/index.html")
+def serve_index():
+    return FileResponse(frontend_out / "index.html")
+
+@server_app.get("/logo.png")
+def serve_logo():
+    return FileResponse(frontend_out / "logo.png")
+
+@server_app.get("/manifest.json")
+def serve_manifest():
+    return FileResponse(frontend_out / "manifest.json")
+
+@server_app.get("/sw.js")
+def serve_sw():
+    return FileResponse(frontend_out / "sw.js")
+
+@server_app.get("/favicon.ico")
+def serve_favicon():
+    return FileResponse(frontend_out / "favicon.ico")
+
+# 8. Keep process alive
 demo.block_thread()
