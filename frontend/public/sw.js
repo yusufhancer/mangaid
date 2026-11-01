@@ -124,3 +124,50 @@ self.addEventListener('fetch', (event) => {
 
   // Default: direct fetch
 });
+
+// Push Notification Event
+self.addEventListener('push', (event) => {
+  let data = { title: 'MangaID', body: 'Ada pemberitahuan baru di MangaID!' };
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      data = { title: 'MangaID', body: event.data.text() };
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: data.icon || '/logo.png',
+    badge: '/icons/icon-192x192.png',
+    vibrate: [150, 50, 150],
+    data: data.data || {},
+    actions: data.actions || []
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'MangaID', options)
+  );
+});
+
+// Notification Click Event (focus window or navigate)
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url && 'focus' in client) {
+          if (targetUrl !== '/') {
+            client.navigate(targetUrl);
+          }
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});

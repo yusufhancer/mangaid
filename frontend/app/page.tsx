@@ -37,6 +37,7 @@ import {
   Pause,
   Volume2,
   Sparkles,
+  Bell,
 } from "lucide-react";
 
 interface AppVersionInfo {
@@ -247,6 +248,62 @@ export default function MangaIDApp() {
   const [hasNewUpdate, setHasNewUpdate] = useState<boolean>(false);
   const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
 
+  // Native Push / Browser Notification states
+  const [notificationPermission, setNotificationPermission] = useState<string>("default");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
+
+  const sendBrowserNotification = (title: string, body: string, url: string = "/") => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      try {
+        if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then((reg) => {
+            const notifOptions: any = {
+              body,
+              icon: "/logo.png",
+              badge: "/icons/icon-192x192.png",
+              vibrate: [150, 50, 150],
+              data: { url }
+            };
+            reg.showNotification(title, notifOptions);
+          }).catch(() => {
+            new Notification(title, { body, icon: "/logo.png" });
+          });
+        } else {
+          new Notification(title, { body, icon: "/logo.png" });
+        }
+      } catch (e) {
+        console.debug("Notification error:", e);
+      }
+    }
+  };
+
+  const requestNotificationAccess = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      alert("Browser pada perangkat ini belum mendukung fitur Web Notification.");
+      return;
+    }
+    try {
+      const perm = await Notification.requestPermission();
+      setNotificationPermission(perm);
+      if (perm === "granted") {
+        sendBrowserNotification(
+          "🔔 Notifikasi MangaID Aktif!",
+          "Status bar HP / Laptop Anda akan menerima pemberitahuan otomatis saat komik selesai diterjemahkan atau ada update versi!"
+        );
+      } else if (perm === "denied") {
+        alert("Izin notifikasi diblokir oleh browser. Anda dapat mengizinkannya di setelan situs browser.");
+      }
+    } catch (err) {
+      console.error("Gagal meminta izin notifikasi:", err);
+    }
+  };
+
   // Device & Workspace management
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -285,6 +342,10 @@ export default function MangaIDApp() {
             if (lastSeen !== data.version) {
               setHasNewUpdate(true);
               setShowUpdateModal(true);
+              sendBrowserNotification(
+                `🚀 MangaID Update: v${data.version} Tersedia!`,
+                `${data.title} - Buka MangaID untuk melihat fitur baru.`
+              );
             }
           }
         }
@@ -554,9 +615,17 @@ export default function MangaIDApp() {
 
         if (data.stage === "done") {
           clearInterval(interval);
+          sendBrowserNotification(
+            "📖 Terjemahan Komik Selesai!",
+            "Bab manga Anda telah selesai diterjemahkan oleh AI. Klik untuk langsung membaca!"
+          );
           fetchChapter(data.chapter_id);
         } else if (data.stage === "failed") {
           clearInterval(interval);
+          sendBrowserNotification(
+            "⚠️ Penerjemahan Gagal",
+            data.error_message || "Terjadi kesalahan saat memproses gambar komik."
+          );
           setErrorMsg(data.error_message || "Penerjemahan gagal.");
         }
       } catch (err) {
@@ -1525,6 +1594,49 @@ export default function MangaIDApp() {
                       Sinkron
                     </button>
                   </div>
+                </div>
+
+                {/* Browser / Native Push Notifications */}
+                <div className="pt-3 border-t border-[#2A2A2C] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-mono text-[#8E8B84] uppercase tracking-wider block">
+                      Notifikasi Browser & HP
+                    </label>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-[4px] font-bold ${
+                        notificationPermission === "granted"
+                          ? "bg-[#4FA36B]/20 text-[#4FA36B] border border-[#4FA36B]/30"
+                          : "bg-[#1C1C1E] text-[#8E8B84] border border-[#2A2A2C]"
+                      }`}
+                    >
+                      {notificationPermission === "granted" ? "Aktif" : "Nonaktif"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#8E8B84] leading-relaxed">
+                    Dapatkan bunyi atau getar di bar notifikasi saat komik selesai diterjemahkan atau ada pembaruan versi.
+                  </p>
+                  {notificationPermission !== "granted" ? (
+                    <button
+                      onClick={requestNotificationAccess}
+                      className="w-full py-2 px-3 rounded-[6px] bg-[#E8452C]/15 hover:bg-[#E8452C]/25 border border-[#E8452C]/30 text-[#FF5A40] text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer btn-press"
+                    >
+                      <Bell className="w-4 h-4 text-[#E8452C]" />
+                      <span>Izinkan & Aktifkan Notifikasi HP</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        sendBrowserNotification(
+                          "🔔 Tes Notifikasi MangaID",
+                          "Fitur notifikasi status bar HP / Laptop berfungsi dengan baik!"
+                        )
+                      }
+                      className="w-full py-2 px-3 rounded-[6px] bg-[#1C1C1E] hover:bg-[#2A2A2C] border border-[#2A2A2C] text-[#ECE9E2] text-xs font-medium flex items-center justify-center gap-2 transition-all cursor-pointer btn-press"
+                    >
+                      <Bell className="w-3.5 h-3.5 text-[#4FA36B]" />
+                      <span>Kirim Tes Notifikasi</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -3601,6 +3713,22 @@ export default function MangaIDApp() {
                 ))}
               </ul>
             </div>
+
+            {/* Notification Opt-in Prompt */}
+            {notificationPermission !== "granted" && (
+              <div className="mb-4 p-3 rounded-[6px] bg-[#E8452C]/10 border border-[#E8452C]/25 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-[#ECE9E2]">
+                  <Bell className="w-4 h-4 text-[#FF5A40] flex-shrink-0" />
+                  <span className="text-[11px] leading-tight">Ingin dapat notifikasi status bar HP saat ada update & terjemahan selesai?</span>
+                </div>
+                <button
+                  onClick={requestNotificationAccess}
+                  className="px-2.5 py-1 rounded-[4px] bg-[#E8452C] hover:bg-[#FF5A40] text-white font-semibold text-[11px] flex-shrink-0 cursor-pointer shadow-sm btn-press"
+                >
+                  Aktifkan
+                </button>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex items-center gap-2 pt-2">
