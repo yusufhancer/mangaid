@@ -10,6 +10,14 @@ ALLOWED_REFERER_MAP = {
     "mangadex.org": "https://mangadex.org/",
     "mangadex.network": "https://mangadex.org/",
     "uploads.mangadex.org": "https://mangadex.org/",
+    "komikindo.ch": "https://komikindo.ch/",
+    "komikindo.tv": "https://komikindo.tv/",
+    "nhentai.net": "https://nhentai.net/",
+    "nhentai.to": "https://nhentai.to/",
+    "supercdn.site": "https://nhentai.to/",
+    "manganato.com": "https://manganato.com/",
+    "chapmanganato.to": "https://chapmanganato.to/",
+    "mangakakalot.com": "https://mangakakalot.com/",
 }
 
 @router.get("/proxy/image")

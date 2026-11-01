@@ -3,15 +3,15 @@ from fastapi import APIRouter
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.2.0",
+    "version": "1.3.0",
     "release_date": "1 November 2026",
-    "title": "MangaID Truly Universal Multi-Source Edition",
+    "title": "MangaID Universal Multi-Source Explorer",
     "changelog": [
-        "Ekspansi Multi-Sumber Universal: Dukungan penuh MangaDex, nhentai (doujinshi 18+), Komikindo, Kiryuu, Manganato, dsb",
-        "Direct Doujinshi Code Resolver: Cukup masukkan angka kode (misal 177013) langsung otomatis diekstrak",
-        "Adapter Khusus Komik Indo: Ekstraksi gambar komik dari tema pembaca MangaReader & Madara (anti-hotlink bypass)",
-        "Adapter Manganato & Global Manga: Otomatisasi referer headers untuk CDN proteksi tinggi",
-        "Sistem Notifikasi Native & In-App terintegrasi"
+        "Pencarian Multi-Sumber (Explorer): Bebas pilih sumber pencarian antara MangaDex, Komik Indo (Komikindo), atau nhentai (Doujinshi 18+)",
+        "Zero Duplikat: Hasil pencarian rapi terisolasi per provider pilihan tanpa judul kembar",
+        "Proxy Cover Gambar Universal: Dukungan anti-hotlink untuk poster Komikindo dan nhentai",
+        "One-Click Ingestion: Langsung terjemahkan bab komik/doujinshi dari katalog tanpa copy-paste URL",
+        "Sistem Notifikasi Update In-App & Native Web Push"
     ]
 }
 
