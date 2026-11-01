@@ -3,14 +3,15 @@ from fastapi import APIRouter
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.1.0",
+    "version": "1.2.0",
     "release_date": "1 November 2026",
-    "title": "MangaID Cloud Edition & Update Notifier",
+    "title": "MangaID Truly Universal Multi-Source Edition",
     "changelog": [
-        "Sistem Notifikasi Update Otomatis: Dapatkan informasi fitur & perbaikan terbaru langsung di dalam aplikasi",
-        "Cloud Hosting 24/7 di Hugging Face ZeroGPU: MangaID aktif terus menerus tanpa laptop harus menyala",
-        "Auto Multi-Key Gemini Engine: Kuota terjemahan AI lebih stabil dan bebas limit",
-        "Peningkatan kecepatan loading reader & render webtoon"
+        "Ekspansi Multi-Sumber Universal: Dukungan penuh MangaDex, nhentai (doujinshi 18+), Komikindo, Kiryuu, Manganato, dsb",
+        "Direct Doujinshi Code Resolver: Cukup masukkan angka kode (misal 177013) langsung otomatis diekstrak",
+        "Adapter Khusus Komik Indo: Ekstraksi gambar komik dari tema pembaca MangaReader & Madara (anti-hotlink bypass)",
+        "Adapter Manganato & Global Manga: Otomatisasi referer headers untuk CDN proteksi tinggi",
+        "Sistem Notifikasi Native & In-App terintegrasi"
     ]
 }
 

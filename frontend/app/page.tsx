@@ -1842,7 +1842,7 @@ export default function MangaIDApp() {
                         <input
                           type="text"
                           required
-                          placeholder="https://..."
+                          placeholder="https://... atau kode doujinshi (contoh: 177013)"
                           value={urlInput}
                           onChange={(e) => setUrlInput(e.target.value)}
                           className="w-full pl-10 pr-4 py-3 min-h-[44px] rounded-[6px] bg-[#0D0D0E] border border-[#2A2A2C] focus:border-[#E8452C] focus:outline-none text-[#ECE9E2] placeholder-[#8E8B84]/60 text-sm transition-colors font-mono"
@@ -1873,15 +1873,33 @@ export default function MangaIDApp() {
                     </form>
 
                     <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs text-[#8E8B84]">
-                      <span>Situs apa pun yang bisa dibuka publik, atau unggah berkas.</span>
-                      <button
-                        type="button"
-                        onClick={() => setUrlInput(SAMPLE_URL)}
-                        className="text-[#8E8B84] hover:text-[#ECE9E2] underline underline-offset-2 transition-colors cursor-pointer self-start sm:self-auto flex items-center gap-1"
-                      >
-                        <LinkIcon className="w-3 h-3" strokeWidth={1.5} />
-                        <span>Gunakan contoh link MangaDex</span>
-                      </button>
+                      <span>Mendukung: MangaDex, Komikindo, Kiryuu, Manganato, nhentai, dsb.</span>
+                      <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                        <span className="text-[11px] text-[#8E8B84]">Contoh:</span>
+                        <button
+                          type="button"
+                          onClick={() => setUrlInput(SAMPLE_URL)}
+                          className="text-[#8E8B84] hover:text-[#ECE9E2] underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
+                        >
+                          MangaDex
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setUrlInput("177013")}
+                          className="text-[#8E8B84] hover:text-[#FF5A40] underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
+                        >
+                          nhentai #177013
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setUrlInput("https://komikindo.tv/one-piece-chapter-1100-bahasa-indonesia/")}
+                          className="text-[#8E8B84] hover:text-[#ECE9E2] underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
+                        >
+                          Komikindo
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : inputMode === "upload" ? (
