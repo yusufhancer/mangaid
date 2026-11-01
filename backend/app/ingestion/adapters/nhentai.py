@@ -2,6 +2,7 @@ import re
 import httpx
 from typing import Optional, List
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 from ..base import SourceAdapter, ChapterData
 from ...core.logging import logger
 
@@ -17,13 +18,11 @@ EXT_MAP = {
 
 class NHentaiAdapter(SourceAdapter):
     """
-    Dedicated Adapter for nhentai and its mirrors using direct JSON API
-    with HTML thumbnail fallback.
-    URL formats:
-      - https://nhentai.net/g/{id}/
-      - https://nhentai.to/g/{id}/
-      - https://nhentai.xxx/g/{id}/
-      - Or standalone 4-8 digit code (e.g. 177013)
+    Dedicated Multi-Mirror Adapter for nhentai:
+    - Primary: nhentai.net JSON API
+    - Fallback 1: nhentai.net HTML Thumbnails
+    - Fallback 2: nhentai.to HTML (Bypasses Cloudflare on datacenter IPs)
+    - Fallback 3: nhentai.xxx HTML
     """
 
     DOMAINS = ["nhentai.net", "nhentai.to", "nhentai.xxx", "nhentai.website"]
@@ -45,7 +44,6 @@ class NHentaiAdapter(SourceAdapter):
         match = ID_PATTERN.search(url_clean)
         if match:
             return match.group(1)
-        # Check if last path segment is digit
         parsed = urlparse(url_clean)
         parts = [p for p in parsed.path.split("/") if p]
         if parts and parts[-1].isdigit():
@@ -59,13 +57,13 @@ class NHentaiAdapter(SourceAdapter):
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/html, */*",
-            "Referer": "https://nhentai.net/",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Referer": "https://nhentai.to/",
             "Accept-Language": "en-US,en;q=0.9,id;q=0.8"
         }
 
         async with httpx.AsyncClient(timeout=30.0, headers=headers, follow_redirects=True) as client:
-            # 1. Try public REST API
+            # Attempt 1: Try public REST API on nhentai.net
             try:
                 api_url = f"https://nhentai.net/api/gallery/{gallery_id}"
                 resp = await client.get(api_url)
@@ -81,7 +79,6 @@ class NHentaiAdapter(SourceAdapter):
                         t = p.get("t", "j")
                         ext = EXT_MAP.get(t, "jpg")
                         page_num = idx + 1
-                        # High-res image CDN
                         page_urls.append(f"https://i.nhentai.net/galleries/{media_id}/{page_num}.{ext}")
 
                     if page_urls:
@@ -95,37 +92,68 @@ class NHentaiAdapter(SourceAdapter):
                             confidence=1.0
                         )
             except Exception as e:
-                logger.warning("nhentai API failed: %s, falling back to HTML parsing...", e)
+                logger.debug("nhentai.net API failed (%s), trying mirrors...", e)
 
-            # 2. Fallback: Parse gallery HTML directly
+            # Attempt 2: Try nhentai.to mirror (Cloudflare-friendly, works on cloud datacenters)
+            try:
+                mirror_url = f"https://nhentai.to/g/{gallery_id}"
+                resp = await client.get(mirror_url)
+                if resp.status_code == 200 and "galleries" in resp.text:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    # Title
+                    title_tag = soup.find("title")
+                    title = f"Doujinshi #{gallery_id}"
+                    if title_tag:
+                        t = title_tag.get_text(strip=True)
+                        t = t.split("»")[0].strip()
+                        if t:
+                            title = t
+
+                    thumbs = soup.select(".thumb-container img, .thumbs img, #thumbnail-container img")
+                    page_urls = []
+                    for img in thumbs:
+                        src = img.get("data-src") or img.get("src") or ""
+                        if "/galleries/" in src and "cover." not in src and "thumb." not in src:
+                            # e.g. https://supercdn.site/galleries/987560/1t.jpg -> 1.jpg
+                            full_url = re.sub(r"(\d+)t\.([a-zA-Z0-9]+)$", r"\1.\2", src)
+                            if full_url not in page_urls:
+                                page_urls.append(full_url)
+
+                    if page_urls:
+                        logger.info("Successfully extracted %d pages from nhentai.to mirror for #%s", len(page_urls), gallery_id)
+                        return ChapterData(
+                            title=title,
+                            chapter_number="1",
+                            language_hint="ja",
+                            page_image_urls=page_urls,
+                            headers_needed={"Referer": "https://nhentai.to/"},
+                            layer_name="nhentai_mirror",
+                            confidence=0.99
+                        )
+            except Exception as e:
+                logger.debug("nhentai.to mirror failed (%s), trying nhentai.net HTML...", e)
+
+            # Attempt 3: Try nhentai.net HTML directly
             web_url = f"https://nhentai.net/g/{gallery_id}/"
             resp = await client.get(web_url)
             resp.raise_for_status()
 
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(resp.text, "lxml")
-
-            # Extract title
+            soup = BeautifulSoup(resp.text, "html.parser")
             h1 = soup.find("h1", class_="title")
-            h2 = soup.find("h2", class_="title")
-            title = (h1.get_text(strip=True) if h1 else None) or (h2.get_text(strip=True) if h2 else None) or f"Doujinshi #{gallery_id}"
+            title = h1.get_text(strip=True) if h1 else f"Doujinshi #{gallery_id}"
 
-            # Extract thumbnail images and convert to high-res URLs
-            # Thumbnail format: https://t.nhentai.net/galleries/{media_id}/{page}t.{ext}
-            # Full format: https://i.nhentai.net/galleries/{media_id}/{page}.{ext}
             thumbs = soup.select(".thumb-container img, .thumbs img")
             page_urls = []
             for img in thumbs:
                 src = img.get("data-src") or img.get("src") or ""
                 if "/galleries/" in src:
-                    # Convert thumbnail URL to full resolution
                     full_url = src.replace("t.nhentai.net", "i.nhentai.net")
                     full_url = re.sub(r"(\d+)t\.([a-zA-Z0-9]+)$", r"\1.\2", full_url)
                     if full_url not in page_urls:
                         page_urls.append(full_url)
 
             if not page_urls:
-                raise ValueError(f"Could not find pages for nhentai #{gallery_id}")
+                raise ValueError(f"Could not extract pages for nhentai #{gallery_id}")
 
             return ChapterData(
                 title=title,

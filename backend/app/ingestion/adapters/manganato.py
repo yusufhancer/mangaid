@@ -32,7 +32,7 @@ class ManganatoAdapter(SourceAdapter):
             resp = await client.get(url)
             resp.raise_for_status()
 
-            soup = BeautifulSoup(resp.text, "lxml")
+            soup = BeautifulSoup(resp.text, "html.parser")
 
             # Extract title
             h1 = soup.find("h1") or soup.find("h2", class_="info-top-chapter")

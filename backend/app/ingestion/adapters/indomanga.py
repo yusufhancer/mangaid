@@ -79,7 +79,7 @@ class IndoMangaAdapter(SourceAdapter):
             resp.raise_for_status()
             html = resp.text
 
-            soup = BeautifulSoup(html, "lxml")
+            soup = BeautifulSoup(html, "html.parser")
             title = self.extract_clean_title(soup, url)
 
             page_urls: List[str] = []
