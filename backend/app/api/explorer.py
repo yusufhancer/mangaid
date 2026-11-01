@@ -32,28 +32,134 @@ if TAGS_FILE.exists():
         logger.warning(f"Failed loading mangadex_tags.json: {e}")
 
 TAG_ALIASES = {
+    # Indonesian & synonyms mapping
     "reinkarnasi": "Reincarnation",
+    "reinkarnasi ke dunia lain": "Isekai",
+    "isekai reinkarnasi": "Isekai",
+    "dunia lain": "Isekai",
+    "reverse isekai": "Isekai",
+    "regresi": "Time Travel",
+    "regression": "Time Travel",
+    "regresi (regression)": "Time Travel",
+    "perjalanan waktu": "Time Travel",
+    "time loop": "Time Travel",
+    "rebirth": "Reincarnation",
+    "transmigrasi": "Reincarnation",
+    "transmigration": "Reincarnation",
     "kultivasi": "Wuxia",
     "cultivation": "Wuxia",
+    "kultivasi abadi": "Wuxia",
+    "kultivasi iblis": "Wuxia",
+    "xianxia": "Wuxia",
+    "xuanhuan": "Wuxia",
+    "murim": "Martial Arts",
     "bela diri": "Martial Arts",
     "silat": "Martial Arts",
+    "silat dewa": "Martial Arts",
+    "pencak silat": "Martial Arts",
     "sihir": "Magic",
+    "penyihir": "Magic",
+    "sihir kuno": "Magic",
+    "akademi sihir": "Magic",
+    "magic academy": "Magic",
     "monster": "Monsters",
+    "monster tamer": "Monsters",
+    "monster taming": "Monsters",
+    "monster girls": "Monster Girls",
     "iblis": "Demons",
+    "raja iblis": "Demons",
+    "demon king": "Demons",
     "hantu": "Ghosts",
-    "waktu": "Time Travel",
+    "arwah": "Ghosts",
     "game": "Video Games",
     "video game": "Video Games",
-    "romcom": "Romance",
-    "romance comedy": "Romance",
-    "overpowered": "Superhero",
-    "super power": "Superhero",
-    "dungeon": "Fantasy",
+    "video games": "Video Games",
+    "dunia game": "Video Games",
+    "virtual reality": "Virtual Reality",
+    "game virtual": "Virtual Reality",
     "leveling": "Video Games",
     "system": "Video Games",
-    "murim": "Martial Arts",
+    "system leveling": "Video Games",
+    "system hunter": "Video Games",
+    "solo leveling": "Video Games",
+    "solo player": "Video Games",
+    "hunter": "Action",
+    "hunters": "Action",
+    "dungeon": "Fantasy",
+    "dungeon master": "Fantasy",
+    "tower": "Fantasy",
+    "tower climbing": "Fantasy",
+    "necromancer": "Fantasy",
+    "dark fantasy": "Fantasy",
+    "romcom": "Romance",
+    "romance comedy": "Romance",
+    "romance comedy (romcom)": "Romance",
+    "komedi romantis": "Romance",
+    "romantis": "Romance",
+    "romantis dewasa": "Romance",
+    "cinta segitiga": "Romance",
+    "overpowered": "Superhero",
+    "super power": "Superhero",
+    "op mc": "Superhero",
+    "overpowered (op mc)": "Superhero",
+    "superhero": "Superhero",
     "school": "School Life",
+    "school life": "School Life",
     "kehidupan sekolah": "School Life",
+    "high school": "School Life",
+    "akademi": "School Life",
+    "academy": "School Life",
+    "villainess": "Villainess",
+    "villainess redemption": "Villainess",
+    "otome game": "Villainess",
+    "otome isekai": "Villainess",
+    "villain": "Drama",
+    "balas dendam": "Tragedy",
+    "pembalasan dendam": "Tragedy",
+    "rencana balas dendam": "Tragedy",
+    "revenge": "Tragedy",
+    "betrayal": "Drama",
+    "kerajaan": "Historical",
+    "kingdom building": "Historical",
+    "royalty": "Historical",
+    "nobility": "Historical",
+    "aristokrasi": "Historical",
+    "militer": "Military",
+    "perang": "Military",
+    "war": "Military",
+    "polisi": "Police",
+    "detektif": "Mystery",
+    "misteri": "Mystery",
+    "misteri pembunuhan": "Mystery",
+    "dokter": "Medical",
+    "medis": "Medical",
+    "masak": "Cooking",
+    "gourmet": "Cooking",
+    "makanan": "Cooking",
+    "musik": "Music",
+    "band": "Music",
+    "idol": "Music",
+    "olahraga": "Sports",
+    "sport": "Sports",
+    "sepak bola": "Sports",
+    "hewan": "Animals",
+    "pet": "Animals",
+    "healer": "Magic",
+    "healing": "Slice of Life",
+    "healing (iyashikei)": "Slice of Life",
+    "iyashikei": "Slice of Life",
+    "zombie": "Zombies",
+    "zombie apocalypse": "Zombies",
+    "apocalypse": "Post-Apocalyptic",
+    "post-apocalyptic survival": "Post-Apocalyptic",
+    "survival game": "Survival",
+    "death game": "Survival",
+    "komik warna": "Full Color",
+    "warna": "Full Color",
+    "webtoon": "Long Strip",
+    "manhwa webtoon": "Long Strip",
+    "manhwa indo": "Long Strip",
+    "sub indo": "Adaptation",
 }
 
 def get_mangadex_tag_id(name: str) -> Optional[str]:
@@ -67,9 +173,10 @@ def get_mangadex_tag_id(name: str) -> Optional[str]:
             return tag_id
     return None
 
-def apply_mangadex_filters(params: list, genres: Optional[str]):
+def apply_mangadex_filters(params: list, genres: Optional[str]) -> List[str]:
+    unmatched_keywords = []
     if not genres:
-        return
+        return unmatched_keywords
     for g in genres.split(","):
         g_clean = g.strip()
         if not g_clean:
@@ -77,14 +184,26 @@ def apply_mangadex_filters(params: list, genres: Optional[str]):
         g_lower = g_clean.lower()
         if g_lower in ("shounen", "shoujo", "seinen", "josei"):
             params.append(("publicationDemographic[]", g_lower))
-        elif g_lower == "manhwa":
+        elif g_lower in ("manhwa", "korean", "raw korea", "🇰🇷 raw korea"):
             params.append(("originalLanguage[]", "ko"))
-        elif g_lower == "manhua":
+        elif g_lower in ("manhua", "chinese", "raw china", "🇨🇳 raw china"):
             params.append(("originalLanguage[]", "zh"))
+        elif g_lower in ("manga", "japanese", "raw jepang", "🇯🇵 raw jepang"):
+            params.append(("originalLanguage[]", "ja"))
+        elif g_lower in ("ecchi", "erotica"):
+            if ("contentRating[]", "erotica") not in params:
+                params.append(("contentRating[]", "erotica"))
+        elif g_lower == "safe":
+            params.append(("contentRating[]", "safe"))
+        elif g_lower == "suggestive":
+            params.append(("contentRating[]", "suggestive"))
         else:
             tag_id = get_mangadex_tag_id(g_clean)
             if tag_id:
                 params.append(("includedTags[]", tag_id))
+            else:
+                unmatched_keywords.append(g_clean)
+    return unmatched_keywords
 
 class ExplorerMangaItem(BaseModel):
     id: str
@@ -118,13 +237,17 @@ async def _search_mangadex(q: str, limit: int, genres: Optional[str] = None) -> 
         ("contentRating[]", "erotica"),
     ]
 
+    unmatched = apply_mangadex_filters(params, genres)
+
     if q.strip():
-        params.append(("title", q.strip()))
+        search_query = f"{q.strip()} {' '.join(unmatched)}".strip()
+        params.append(("title", search_query))
+        params.append(("order[relevance]", "desc"))
+    elif unmatched:
+        params.append(("title", " ".join(unmatched)))
         params.append(("order[relevance]", "desc"))
     else:
         params.append(("order[followedCount]", "desc"))
-
-    apply_mangadex_filters(params, genres)
 
     async with httpx.AsyncClient(timeout=20.0, headers=MANGADEX_HEADERS) as client:
         resp = await client.get(f"{MANGADEX_API_BASE}/manga", params=params)
@@ -193,13 +316,17 @@ async def _search_raw_manga(q: str, limit: int, genres: Optional[str] = None) ->
         ("contentRating[]", "erotica"),
     ]
 
+    unmatched = apply_mangadex_filters(params, genres)
+
     if q.strip():
-        params.append(("title", q.strip()))
+        search_query = f"{q.strip()} {' '.join(unmatched)}".strip()
+        params.append(("title", search_query))
+        params.append(("order[relevance]", "desc"))
+    elif unmatched:
+        params.append(("title", " ".join(unmatched)))
         params.append(("order[relevance]", "desc"))
     else:
         params.append(("order[followedCount]", "desc"))
-
-    apply_mangadex_filters(params, genres)
 
     async with httpx.AsyncClient(timeout=20.0, headers=MANGADEX_HEADERS) as client:
         resp = await client.get(f"{MANGADEX_API_BASE}/manga", params=params)
@@ -271,13 +398,17 @@ async def _search_komikindo(q: str, limit: int, genres: Optional[str] = None) ->
             ("contentRating[]", "suggestive"),
         ]
 
+        unmatched = apply_mangadex_filters(params, genres)
+
         if q.strip():
-            params.append(("title", q.strip()))
+            search_query = f"{q.strip()} {' '.join(unmatched)}".strip()
+            params.append(("title", search_query))
+            params.append(("order[relevance]", "desc"))
+        elif unmatched:
+            params.append(("title", " ".join(unmatched)))
             params.append(("order[relevance]", "desc"))
         else:
             params.append(("order[followedCount]", "desc"))
-
-        apply_mangadex_filters(params, genres)
 
         async with httpx.AsyncClient(timeout=15.0, headers=MANGADEX_HEADERS) as client:
             resp = await client.get(f"{MANGADEX_API_BASE}/manga", params=params)

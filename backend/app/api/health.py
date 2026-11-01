@@ -4,15 +4,15 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.4.3",
+    "version": "1.4.4",
     "release_date": "2 November 2026",
-    "title": "MangaID Authentic Logo Branding & Smooth Zoom Splash Intro",
+    "title": "MangaID Master Complete Genre Universe (780+ Genres)",
     "changelog": [
-        "Perbaikan Logo & Nama PWA: Nama app dikunci menjadi 'MangaID' dan seluruh ikon PWA disinkronkan dengan logo resmi merah metalik",
-        "Animasi Splash Intro Logo Murni: Transisi halus logo MangaID dari kecil ke besar secara lembut tanpa lonjakan naik-turun",
-        "Override Manifest Gradio: Menghilangkan logo oranye Gradio dan menggantinya dengan manifes asli MangaID",
-        "100% Genre Asli Tiap Web & Pencarian Genre Real-Time",
-        "Perlindungan Riwayat Permanen & Fitur Backup / Pulihkan"
+        "Database Genre Super Lengkap: 780+ total genre unik (430+ tag nhentai, 290+ genre Komik Indo, 210+ genre MangaDex & RAW)",
+        "Pencarian & Penambahan Genre Kustom: Ketik genre apa pun dan tekan Enter untuk langsung menambahkan ke filter aktif",
+        "Pemetaan Cerdas (Smart Mapping): Alias & sinonim genre (Murim, Cultivation, Necromancer, Leveling, Reinkarnasi, dsb.) otomatis difilter di MangaDex & Komikindo",
+        "Panel Filter Diperluas: Tampilan filter genre lebih leluasa dengan scroll halus dan indikator jumlah hasil pencarian tag",
+        "Perbaikan Logo & Nama PWA resmi MangaID dan Animasi Splash Intro Murni"
     ]
 }
 
