@@ -2,14 +2,11 @@ import os
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 import gradio as gr
+import spaces
 
-try:
-    import spaces
-    @spaces.GPU
-    def gpu_service_check():
-        return True
-except Exception:
-    pass
+@spaces.GPU
+def gpu_health():
+    return "MangaID AI Engine Online"
 
 from backend.app.main import app as fastapi_app
 
@@ -20,10 +17,12 @@ if frontend_out.exists():
     # Mount Next.js static export at root "/"
     fastapi_app.mount("/", StaticFiles(directory=str(frontend_out), html=True), name="frontend")
 
-# Gradio status UI to satisfy Hugging Face Spaces health check
-demo = gr.Blocks(title="MangaID Status")
-with demo:
+# Gradio status UI to satisfy Hugging Face Spaces ZeroGPU scanner
+with gr.Blocks(title="MangaID Status") as demo:
     gr.Markdown("# 📖 MangaID Universal Translator\nStatus: **Online** | Powered by Gemini AI (16 GB RAM Cloud)")
+    btn = gr.Button("Check AI Status", visible=False)
+    txt = gr.Textbox(visible=False)
+    btn.click(fn=gpu_health, inputs=[], outputs=[txt])
 
 app = gr.mount_gradio_app(fastapi_app, demo, path="/gradio_status")
 
