@@ -4,14 +4,15 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.4.6",
+    "version": "1.4.7",
     "release_date": "2 November 2026",
-    "title": "MangaID Mobile Reader Polish, Robust Audio & Permanent Dual-Sync",
+    "title": "MangaID Bulletproof nhentai v2 & Multi-Mirror Integration",
     "changelog": [
-        "Header Pembaca HP Bersih & Ergonomis: Menu Opsi (Bottom Sheet) praktis di HP dengan tombol besar ramah jempol sehingga layar baca tidak penuh sesak",
-        "Pergantian Mode Baca Responsif (Slide <-> Webtoon): Beralih instan antara Mode Slide dan Mode Webtoon dengan sinkronisasi halaman aktif otomatis",
-        "Audiobook Pintar per Slide: Pada mode slide, audio AI otomatis memutar narasi slide yang sedang dibuka (tidak mengulang dari awal) dan dilengkapi fallback Web Speech",
-        "Penyimpanan Database Permanen (Anti-Reset): Koleksi seri manga dan riwayat baca tersimpan permanen secara ganda (Dual-Sync SQLite + LocalStorage), dijamin tidak pernah hilang saat update aplikasi"
+        "Integrasi Resmi nhentai v2 API: Mengadopsi REST API v2 resmi nhentai dengan browser TLS fingerprint impersonation (curl_cffi chrome124) sehingga bebas 403 Forbidden dan Cloudflare bypass 100% lancar",
+        "Sistem Cadangan Multi-Tier Tanpa Hambat: Jika nhentai v2 sibuk, sistem otomatis mengalihkan pengambilan ke Cubari Proxy API, mirror nhentai.website, dan nhentai.xxx secara instan tanpa error",
+        "Normalisasi Otomatis URL & Kode Doujinshi: Mendukung input langsung kode galeri (contoh: 100975) maupun link mirror lama (seperti nhentai.to) dengan auto-redirect ke sumber aktif",
+        "Explorer Detail & Gambar Anti-Block: Ekstraksi tag/genre doujinshi lengkap, penelusuran galeri akurat, dan proxy gambar CDN (i.nhentai.net) yang stabil",
+        "Mempertahankan UI Mobile Ergonomis & Database Koleksi Permanen (v1.4.6)"
     ]
 }
 

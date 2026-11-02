@@ -1,6 +1,7 @@
 import httpx
 import re
 import json
+import asyncio
 from pathlib import Path
 from urllib.parse import quote, unquote
 from typing import List, Optional
@@ -8,6 +9,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from bs4 import BeautifulSoup
 from ..core.logging import logger
+
+try:
+    from curl_cffi import requests as cffi_requests
+    HAS_CURL_CFFI = True
+except ImportError:
+    cffi_requests = None
+    HAS_CURL_CFFI = False
 
 router = APIRouter(prefix="/explorer", tags=["Explorer"])
 
@@ -691,48 +699,147 @@ async def _search_nhentai(q: str, limit: int, genres: Optional[str] = None) -> L
 
     # If numeric code, try direct fetch first
     if clean_q.isdigit() and len(clean_q) in (4, 5, 6, 7, 8):
-        try:
-            async with httpx.AsyncClient(timeout=10.0, headers=WEB_HEADERS, follow_redirects=True) as client:
-                resp = await client.get(f"https://nhentai.to/g/{clean_q}/")
+        # 1. Try v2 API via curl_cffi
+        if HAS_CURL_CFFI:
+            try:
+                def _get_v2_code():
+                    return cffi_requests.get(
+                        f"https://nhentai.net/api/v2/galleries/{clean_q}",
+                        impersonate="chrome124",
+                        headers={"Accept": "application/json", "Referer": "https://nhentai.net/"},
+                        timeout=10.0
+                    )
+                resp = await asyncio.to_thread(_get_v2_code)
                 if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                    title_el = soup.select_one("#info h1, #info h2")
-                    cover_el = soup.select_one("#cover img")
-                    title = title_el.get_text(strip=True) if title_el else f"Doujinshi #{clean_q}"
-                    cover_src = (cover_el.get("src") or cover_el.get("data-src") or "") if cover_el else ""
-                    cover_proxy = f"/api/proxy/image?url={quote(cover_src, safe='')}" if cover_src else None
-
-                    # Extract all tags from detail page
-                    raw_tags = [t.get_text(strip=True) for t in soup.select(".tag-container .tags a .name")]
-                    tags = ["Doujinshi", "18+"] + [t for t in raw_tags if t not in ("Doujinshi", "18+")]
-
-                    results.append(ExplorerMangaItem(
+                    data = resp.json()
+                    title_obj = data.get("title", {})
+                    title = title_obj.get("pretty") or title_obj.get("english") or title_obj.get("japanese") or f"Doujinshi #{clean_q}"
+                    cover_info = data.get("cover", {})
+                    cover_path = cover_info.get("path") or ""
+                    cover_proxy = f"/api/proxy/image?url={quote('https://i.nhentai.net/' + cover_path, safe='')}" if cover_path else None
+                    tags = ["Doujinshi", "18+"]
+                    for t in data.get("tags", []):
+                        t_name = t.get("name")
+                        if t_name and t_name not in tags:
+                            tags.append(t_name)
+                    return [ExplorerMangaItem(
                         id=f"nh-{clean_q}",
                         title=title,
                         description=f"Kode Doujinshi #{clean_q}",
-                        status="Completed",
+                        status="18+",
                         cover_url=cover_proxy,
                         tags=tags,
                         source="nhentai",
-                        original_url=f"https://nhentai.to/g/{clean_q}/"
-                    ))
-                    return results
+                        original_url=f"https://nhentai.net/g/{clean_q}/"
+                    )]
+            except Exception as e:
+                logger.debug(f"Direct nhentai v2 code fetch error: {e}")
+
+        # 2. Try Cubari API
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers=WEB_HEADERS, follow_redirects=True) as client:
+                c_resp = await client.get(f"https://cubari.moe/read/api/nhentai/series/{clean_q}/")
+                if c_resp.status_code == 200:
+                    c_data = c_resp.json()
+                    title = c_data.get("title") or f"Doujinshi #{clean_q}"
+                    cover_url = c_data.get("cover") or ""
+                    cover_proxy = f"/api/proxy/image?url={quote(cover_url, safe='')}" if cover_url else None
+                    return [ExplorerMangaItem(
+                        id=f"nh-{clean_q}",
+                        title=title,
+                        description=f"Kode Doujinshi #{clean_q}",
+                        status="18+",
+                        cover_url=cover_proxy,
+                        tags=["Doujinshi", "18+"],
+                        source="nhentai",
+                        original_url=f"https://nhentai.net/g/{clean_q}/"
+                    )]
         except Exception as e:
-            logger.warning(f"Direct nhentai code fetch error: {e}")
+            logger.debug(f"Direct cubari code fetch error: {e}")
+
+        # 3. Try nhentai.website
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers=WEB_HEADERS, follow_redirects=True) as client:
+                resp = await client.get(f"https://nhentai.website/g/{clean_q}/")
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    title_el = soup.find("h1") or soup.find("title")
+                    title = title_el.get_text(strip=True) if title_el else f"Doujinshi #{clean_q}"
+                    title = re.sub(r"nhentai - Hentai Manga.*$", "", title, flags=re.I).strip()
+                    cover_el = soup.select_one("#cover img, .cover img")
+                    cover_src = (cover_el.get("src") or cover_el.get("data-src") or "") if cover_el else ""
+                    cover_proxy = f"/api/proxy/image?url={quote(cover_src, safe='')}" if cover_src else None
+                    raw_tags = [t.get_text(strip=True) for t in soup.select(".tag-container .tags a .name, .tags a")]
+                    tags = ["Doujinshi", "18+"] + [t for t in raw_tags if t and t not in ("Doujinshi", "18+")]
+                    return [ExplorerMangaItem(
+                        id=f"nh-{clean_q}",
+                        title=title,
+                        description=f"Kode Doujinshi #{clean_q}",
+                        status="18+",
+                        cover_url=cover_proxy,
+                        tags=tags,
+                        source="nhentai",
+                        original_url=f"https://nhentai.net/g/{clean_q}/"
+                    )]
+        except Exception as e:
+            logger.debug(f"Direct nhentai.website code fetch error: {e}")
 
     # General search with query or genres
-    try:
-        search_terms = []
-        if clean_q:
-            search_terms.append(clean_q)
-        if genres:
-            for g in genres.split(","):
-                g_c = g.strip()
-                if g_c:
-                    search_terms.append(g_c)
+    search_terms = []
+    if clean_q:
+        search_terms.append(clean_q)
+    if genres:
+        for g in genres.split(","):
+            g_c = g.strip()
+            if g_c:
+                search_terms.append(g_c)
 
-        query_str = " ".join(search_terms) if search_terms else "popular"
-        search_url = f"https://nhentai.to/search?q={quote(query_str)}"
+    query_str = " ".join(search_terms) if search_terms else "popular"
+
+    # TIER A: v2 API search via curl_cffi
+    if HAS_CURL_CFFI:
+        try:
+            def _get_v2_search():
+                return cffi_requests.get(
+                    f"https://nhentai.net/api/v2/search?query={quote(query_str)}&page=1",
+                    impersonate="chrome124",
+                    headers={"Accept": "application/json", "Referer": "https://nhentai.net/"},
+                    timeout=12.0
+                )
+            s_resp = await asyncio.to_thread(_get_v2_search)
+            if s_resp.status_code == 200:
+                s_data = s_resp.json()
+                items = s_data.get("result", s_data.get("results", []))
+                for it in items:
+                    if len(results) >= limit:
+                        break
+                    c_id = str(it.get("id"))
+                    title = it.get("english_title") or it.get("japanese_title") or f"Doujinshi #{c_id}"
+                    thumb = it.get("thumbnail") or ""
+                    cover_proxy = f"/api/proxy/image?url={quote('https://t.nhentai.net/' + thumb, safe='')}" if thumb else None
+                    tags = ["Doujinshi", "18+"]
+                    if genres:
+                        for gn in genres.split(","):
+                            if gn.strip() and gn.strip() not in tags:
+                                tags.append(gn.strip())
+                    results.append(ExplorerMangaItem(
+                        id=f"nh-{c_id}",
+                        title=title,
+                        description=f"Doujinshi galeri #{c_id}",
+                        status="18+",
+                        cover_url=cover_proxy,
+                        tags=tags,
+                        source="nhentai",
+                        original_url=f"https://nhentai.net/g/{c_id}/"
+                    ))
+                if results:
+                    return results
+        except Exception as e:
+            logger.debug(f"nhentai v2 search error: {e}")
+
+    # TIER B: nhentai.website HTML search via httpx
+    try:
+        search_url = f"https://nhentai.website/search/?q={quote(query_str)}"
         async with httpx.AsyncClient(timeout=15.0, headers=WEB_HEADERS, follow_redirects=True) as client:
             resp = await client.get(search_url)
             if resp.status_code == 200:
@@ -747,7 +854,56 @@ async def _search_nhentai(q: str, limit: int, genres: Optional[str] = None) -> L
                     if not a:
                         continue
                     href = a.get("href", "")
-                    code_match = re.search(r"/g/(\d+)/?", href)
+                    code_match = re.search(r"/(?:g|read)/(\d+)", href)
+                    if not code_match:
+                        continue
+                    code = code_match.group(1)
+                    if any(r.id == f"nh-{code}" for r in results):
+                        continue
+
+                    title = caption.get_text(strip=True) if caption else f"Doujinshi #{code}"
+                    img_src = (img.get("data-src") or img.get("src") or "") if img else ""
+                    cover_proxy = f"/api/proxy/image?url={quote(img_src, safe='')}" if img_src else None
+
+                    tags = ["Doujinshi", "18+"]
+                    if genres:
+                        for gn in genres.split(","):
+                            if gn.strip() and gn.strip() not in tags:
+                                tags.append(gn.strip())
+
+                    results.append(ExplorerMangaItem(
+                        id=f"nh-{code}",
+                        title=title,
+                        description=f"Doujinshi galeri #{code}",
+                        status="18+",
+                        cover_url=cover_proxy,
+                        tags=tags,
+                        source="nhentai",
+                        original_url=f"https://nhentai.net/g/{code}/"
+                    ))
+                if results:
+                    return results
+    except Exception as e:
+        logger.debug(f"nhentai.website search error: {e}")
+
+    # TIER C: Legacy nhentai.to fallback
+    try:
+        search_url = f"https://nhentai.to/search?q={quote(query_str)}"
+        async with httpx.AsyncClient(timeout=10.0, headers=WEB_HEADERS, follow_redirects=True) as client:
+            resp = await client.get(search_url)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                galleries = soup.select(".gallery")
+                for g in galleries:
+                    if len(results) >= limit:
+                        break
+                    a = g.select_one("a")
+                    img = g.select_one("img")
+                    caption = g.select_one(".caption")
+                    if not a:
+                        continue
+                    href = a.get("href", "")
+                    code_match = re.search(r"/g/(\d+)", href)
                     if not code_match:
                         continue
                     code = code_match.group(1)
@@ -775,7 +931,7 @@ async def _search_nhentai(q: str, limit: int, genres: Optional[str] = None) -> L
                         original_url=f"https://nhentai.to/g/{code}/"
                     ))
     except Exception as e:
-        logger.warning(f"nhentai search error: {e}")
+        logger.debug(f"nhentai.to search error: {e}")
 
     return results
 
@@ -811,28 +967,19 @@ async def get_manga_details(manga_id: str):
     try:
         if manga_id.startswith("nh-"):
             code = manga_id[3:]
-            detail_url = f"https://nhentai.to/g/{code}/"
-            async with httpx.AsyncClient(timeout=15.0, headers=WEB_HEADERS, follow_redirects=True) as client:
-                resp = await client.get(detail_url)
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                    title_el = soup.select_one("#info h1, #info h2, h1")
-                    title = title_el.get_text(strip=True) if title_el else f"Doujinshi #{code}"
-                    cover_el = soup.select_one("#cover img")
-                    cover_src = (cover_el.get("src") or cover_el.get("data-src") or "") if cover_el else ""
-                    cover_proxy = f"/api/proxy/image?url={quote(cover_src, safe='')}" if cover_src else None
-                    raw_tags = [t.get_text(strip=True) for t in soup.select(".tag-container .tags a .name")]
-                    tags = ["Doujinshi", "18+"] + [t for t in raw_tags if t not in ("Doujinshi", "18+")]
-                    return ExplorerMangaItem(
-                        id=f"nh-{code}",
-                        title=title,
-                        description=f"Doujinshi #{code}",
-                        status="Completed",
-                        cover_url=cover_proxy,
-                        tags=tags,
-                        source="nhentai",
-                        original_url=detail_url
-                    )
+            items = await _search_nhentai(code, limit=1)
+            if items:
+                return items[0]
+            return ExplorerMangaItem(
+                id=f"nh-{code}",
+                title=f"Doujinshi #{code}",
+                description=f"Doujinshi #{code}",
+                status="Completed",
+                cover_url=None,
+                tags=["Doujinshi", "18+"],
+                source="nhentai",
+                original_url=f"https://nhentai.net/g/{code}/"
+            )
         elif manga_id.startswith("ki-"):
             comic_url = unquote(manga_id[3:])
             async with httpx.AsyncClient(timeout=15.0, headers=WEB_HEADERS, follow_redirects=True) as client:
@@ -942,7 +1089,7 @@ async def get_manga_chapters(
                     language="ja",
                     group_name="Doujinshi",
                     is_external=False,
-                    external_url=f"https://nhentai.to/g/{code}/",
+                    external_url=f"https://nhentai.net/g/{code}/",
                     source="nhentai"
                 )
             ]

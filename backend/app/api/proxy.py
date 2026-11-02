@@ -14,6 +14,10 @@ ALLOWED_REFERER_MAP = {
     "komikindo.tv": "https://komikindo.tv/",
     "nhentai.net": "https://nhentai.net/",
     "nhentai.to": "https://nhentai.to/",
+    "nhentai.xxx": "https://nhentai.xxx/",
+    "nhentai.website": "https://nhentai.website/",
+    "nhentai.jp.net": "https://nhentai.website/",
+    "cubari.moe": "https://cubari.moe/",
     "supercdn.site": "https://nhentai.to/",
     "manganato.com": "https://manganato.com/",
     "chapmanganato.to": "https://chapmanganato.to/",
@@ -34,7 +38,7 @@ async def proxy_image(url: str = Query(..., description="Target image URL to pro
     domain = parsed.hostname.lower() if parsed.hostname else ""
 
     headers = {
-        "User-Agent": "MangaID/1.0 (https://github.com/mangaid-app)",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
     }
 

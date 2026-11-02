@@ -39,6 +39,11 @@ class IngestionPipeline:
         # Auto-convert pure numeric doujinshi codes (e.g. 177013) to full URL
         if PURE_DIGITS.match(url_clean):
             url_clean = f"https://nhentai.net/g/{url_clean}/"
+        else:
+            # Auto-normalize nhentai mirror URLs (e.g. nhentai.to, nhentai.xxx) to official nhentai.net
+            nh_match = re.search(r"nhentai\.[a-z]+/g/(\d+)", url_clean, re.IGNORECASE)
+            if nh_match:
+                url_clean = f"https://nhentai.net/g/{nh_match.group(1)}/"
 
         assert_url_safe(url_clean)
 
