@@ -4,14 +4,13 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.4.7",
+    "version": "1.4.8",
     "release_date": "2 November 2026",
-    "title": "MangaID Bulletproof nhentai v2 & Multi-Mirror Integration",
+    "title": "MangaID Instant Open (No Splash) & Bulletproof Engine",
     "changelog": [
-        "Integrasi Resmi nhentai v2 API: Mengadopsi REST API v2 resmi nhentai dengan browser TLS fingerprint impersonation (curl_cffi chrome124) sehingga bebas 403 Forbidden dan Cloudflare bypass 100% lancar",
-        "Sistem Cadangan Multi-Tier Tanpa Hambat: Jika nhentai v2 sibuk, sistem otomatis mengalihkan pengambilan ke Cubari Proxy API, mirror nhentai.website, dan nhentai.xxx secara instan tanpa error",
-        "Normalisasi Otomatis URL & Kode Doujinshi: Mendukung input langsung kode galeri (contoh: 100975) maupun link mirror lama (seperti nhentai.to) dengan auto-redirect ke sumber aktif",
-        "Explorer Detail & Gambar Anti-Block: Ekstraksi tag/genre doujinshi lengkap, penelusuran galeri akurat, dan proxy gambar CDN (i.nhentai.net) yang stabil",
+        "Membuka Web Langsung Instan: Animasi splash screen intro saat awal masuk telah dihapus secara menyeluruh, antarmuka web sekarang langsung siap digunakan tanpa jeda waktu tunggu",
+        "Integrasi Penuh nhentai v2 API: Browser TLS fingerprint impersonation (curl_cffi chrome124) dan multi-tier fallback (Cubari, Website mirror) bebas 403 Forbidden",
+        "Explorer Detail & Multi-Mirror Stabil: Ekstraksi tag/genre lengkap dan proxy gambar CDN anti-blokir",
         "Mempertahankan UI Mobile Ergonomis & Database Koleksi Permanen (v1.4.6)"
     ]
 }
