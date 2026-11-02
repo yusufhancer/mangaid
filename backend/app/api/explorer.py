@@ -946,9 +946,6 @@ async def search_manga(
     q_clean = q.strip()
     genres_clean = genres.strip() if genres else None
 
-    if not q_clean and not genres_clean:
-        return []
-
     try:
         if source_clean in ("raw", "jepang", "korea"):
             return await _search_raw_manga(q_clean, limit=limit, genres=genres_clean)

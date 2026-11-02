@@ -4,14 +4,15 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.5.0",
+    "version": "1.5.1",
     "release_date": "2 November 2026",
-    "title": "MangaID MangaDex Modern Design System & Clean Catalog Redesign",
+    "title": "MangaID MangaDex True Split Architecture & Zero-Click Popular Catalog",
     "changelog": [
-        "Desain Visual Bersih ala MangaDex: Menghilangkan pola desain 'AI-slop', digantikan dengan tema gelap slate elegan autentik MangaDex (#191a1c, #202125, #ff6740 accent) dan tipografi modern Inter yang nyaman di mata",
-        "Top Navigation Bar Modern & Luas: Menggantikan sidebar kaku dengan top header bar responsif bergaya MangaDex yang dilengkapi pencarian global cepat dan navigasi instan",
-        "Kartu Manga Rasio 7:10 & Detail Hero Blur: Tampilan poster vertikal proporsional dengan badge status (Ongoing, Completed, 18+), efek gradien halus, dan modal detail komik dengan latar hero cover blur",
-        "Seluruh Fitur & Logika Inti Tetap Utuh: Mesin penerjemah AI, ekstraksi multi-sumber (MangaDex, Komikindo, nhentai v2), audiobook per slide, pembaca slide/webtoon, dan database ganda permanen tetap berjalan 100% sempurna"
+        "Pemisahan 3 Halaman Utama Dedikasi: Navigasi bersih terbagi utuh antara Jelajah (Katalog Manga), Penerjemah (Studio Translasi AI), dan Koleksi (Perpustakaan Pribadi & Riwayat)",
+        "Zero-Click Popular Manga Homepage: Saat pertama kali membuka MangaID, 24 manga terpopuler langsung tampil otomatis layaknya beranda MangaDex tanpa perlu mencari manual",
+        "Featured Hero Banner Carousel: Banner unggulan dinamis dengan latar blur sinematik, poster rasio 7:10, tag genre, sinopsis cerita, dan navigasi slide",
+        "Pemilih Sumber Web Cepat: Tombol sumber di bagian atas Jelajah (🌐 MangaDex, 🇮🇩 Komik Indo, 🔞 nhentai, 🇯🇵 RAW Manga) yang otomatis menyegarkan katalog populer sumber bersangkutan",
+        "Stabilitas & Logika 100% Utuh: Mesin penerjemah AI, pembaca slide/webtoon, audiobook per slide, dan dual-sync database tetap berjalan sempurna"
     ]
 }
 

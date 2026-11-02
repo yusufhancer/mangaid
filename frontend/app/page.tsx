@@ -1326,17 +1326,19 @@ const SOURCE_GENRES: Record<"mangadex" | "raw" | "komikindo" | "nhentai", string
 export default function MangaIDApp() {
   // Navigation states: 'home' | 'review' | 'progress' | 'reader'
   const [view, setView] = useState<"home" | "review" | "progress" | "reader">("home");
+  const [activeNavTab, setActiveNavTab] = useState<"jelajah" | "penerjemah" | "koleksi">("jelajah");
   const [savedChapters, setSavedChapters] = useState<SavedChapter[]>([]);
 
-  // Home states
-  const [inputMode, setInputMode] = useState<"url" | "upload" | "explorer">("url");
+  // Penerjemah states
+  const [translatorMode, setTranslatorMode] = useState<"url" | "upload">("url");
   const [urlInput, setUrlInput] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [uploadTitle, setUploadTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Explorer states
+  // Explorer & Jelajah states
+  const [carouselIdx, setCarouselIdx] = useState(0);
   const [explorerSource, setExplorerSource] = useState<"mangadex" | "raw" | "komikindo" | "nhentai">("mangadex");
   const [explorerQuery, setExplorerQuery] = useState("");
   const [explorerLoading, setExplorerLoading] = useState(false);
@@ -1666,7 +1668,6 @@ export default function MangaIDApp() {
     const q = (customQuery !== undefined ? customQuery : explorerQuery).trim();
     const src = customSource !== undefined ? customSource : explorerSource;
     const gn = customGenres !== undefined ? customGenres : selectedGenres;
-    if (!q && gn.length === 0) return;
 
     setExplorerLoading(true);
     setErrorMsg(null);
@@ -1674,17 +1675,25 @@ export default function MangaIDApp() {
 
     try {
       const genresParam = gn.length > 0 ? `&genres=${encodeURIComponent(gn.join(","))}` : "";
-      const resp = await fetch(`${BACKEND_URL}/api/explorer/search?q=${encodeURIComponent(q)}&source=${src}${genresParam}`);
+      const resp = await fetch(`${BACKEND_URL}/api/explorer/search?q=${encodeURIComponent(q)}&source=${src}${genresParam}&limit=24`);
       if (!resp.ok) {
         throw new Error("Gagal mencari manga di katalog.");
       }
       const data: ExplorerManga[] = await resp.json();
       setExplorerResults(data);
+      setCarouselIdx(0);
     } catch (err: any) {
       setErrorMsg(err.message || "Terjadi kesalahan saat mencari manga.");
     } finally {
       setExplorerLoading(false);
     }
+  };
+
+  const handleSwitchSource = (newSource: "mangadex" | "raw" | "komikindo" | "nhentai") => {
+    setExplorerSource(newSource);
+    setSelectedGenres([]);
+    setExplorerQuery("");
+    handleSearchManga("", newSource, []);
   };
 
   const toggleGenre = (genre: string) => {
@@ -2144,9 +2153,23 @@ export default function MangaIDApp() {
       const cId = params.get("chapter");
       if (cId) {
         fetchChapter(cId);
+      } else {
+        // Otomatis muat manga terpopuler saat pertama kali aplikasi dibuka
+        handleSearchManga("", "mangadex", []);
       }
     }
   }, [deviceId]);
+
+  // Otomatis rotasi carousel judul unggulan setiap 6 detik
+  useEffect(() => {
+    if (view !== "home" || activeNavTab !== "jelajah" || explorerResults.length === 0) return;
+    const maxIdx = Math.min(5, explorerResults.length);
+    if (maxIdx <= 1) return;
+    const timer = setInterval(() => {
+      setCarouselIdx((prev) => (prev + 1) % maxIdx);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [view, activeNavTab, explorerResults.length]);
 
   // Fetch Chapter for Reader
   const fetchChapter = async (cId: string) => {
@@ -2577,6 +2600,10 @@ export default function MangaIDApp() {
     });
   }, [seriesList, searchQuery, filterStatus]);
 
+  const totalRenderedPagesAll = useMemo(() => {
+    return savedChapters.reduce((acc, c) => acc + (c.rendered_pages || 0), 0);
+  }, [savedChapters]);
+
   // Drawer Chapters with internal search & sorting
   const drawerChapters = useMemo(() => {
     if (!selectedSeries) return [];
@@ -2815,7 +2842,7 @@ export default function MangaIDApp() {
               <div
                 onClick={() => {
                   setView("home");
-                  setInputMode("explorer");
+                  setActiveNavTab("jelajah");
                   if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className="flex items-center gap-2.5 cursor-pointer group select-none"
@@ -2835,10 +2862,10 @@ export default function MangaIDApp() {
                 <button
                   onClick={() => {
                     setView("home");
-                    setInputMode("explorer");
+                    setActiveNavTab("jelajah");
                   }}
                   className={`px-3 py-1.5 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    inputMode === "explorer" && view === "home"
+                    activeNavTab === "jelajah" && view === "home"
                       ? "bg-[#2a2b30] text-[#ff6740]"
                       : "text-[#9ca3af] hover:text-white hover:bg-[#202125]"
                   }`}
@@ -2850,10 +2877,10 @@ export default function MangaIDApp() {
                 <button
                   onClick={() => {
                     setView("home");
-                    setInputMode("url");
+                    setActiveNavTab("penerjemah");
                   }}
                   className={`px-3 py-1.5 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    inputMode !== "explorer" && view === "home"
+                    activeNavTab === "penerjemah" && view === "home"
                       ? "bg-[#2a2b30] text-[#ff6740]"
                       : "text-[#9ca3af] hover:text-white hover:bg-[#202125]"
                   }`}
@@ -2865,10 +2892,13 @@ export default function MangaIDApp() {
                 <button
                   onClick={() => {
                     setView("home");
-                    const el = document.getElementById("bab-tersimpan-section");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                    setActiveNavTab("koleksi");
                   }}
-                  className="px-3 py-1.5 rounded-[6px] text-[#9ca3af] hover:text-white hover:bg-[#202125] transition-colors cursor-pointer flex items-center gap-1.5"
+                  className={`px-3 py-1.5 rounded-[6px] transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeNavTab === "koleksi" && view === "home"
+                      ? "bg-[#2a2b30] text-[#ff6740]"
+                      : "text-[#9ca3af] hover:text-white hover:bg-[#202125]"
+                  }`}
                 >
                   <BookOpen className="w-4 h-4" />
                   <span>Koleksi</span>
@@ -2889,13 +2919,15 @@ export default function MangaIDApp() {
                   value={explorerQuery}
                   onChange={(e) => {
                     setExplorerQuery(e.target.value);
-                    if (inputMode !== "explorer") setInputMode("explorer");
+                    if (activeNavTab !== "jelajah") setActiveNavTab("jelajah");
+                    if (view !== "home") setView("home");
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      if (inputMode !== "explorer") setInputMode("explorer");
-                      handleSearchManga();
+                      if (activeNavTab !== "jelajah") setActiveNavTab("jelajah");
+                      if (view !== "home") setView("home");
+                      handleSearchManga(e.currentTarget.value);
                     }
                   }}
                   className="w-full pl-9 pr-10 py-1.5 rounded-full bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-xs text-white placeholder-[#9ca3af]/60 transition-colors"
@@ -2903,7 +2935,8 @@ export default function MangaIDApp() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (inputMode !== "explorer") setInputMode("explorer");
+                    if (activeNavTab !== "jelajah") setActiveNavTab("jelajah");
+                    if (view !== "home") setView("home");
                     handleSearchManga();
                   }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#9ca3af] hover:text-[#ff6740] px-1 py-0.5 rounded cursor-pointer"
@@ -3276,237 +3309,27 @@ export default function MangaIDApp() {
                 </div>
               )}
 
-              {/* Card Box Workspace (The one user loved!) */}
-              <div className="bg-[#202125] border border-[#2e3036] rounded-[8px] p-5 sm:p-6 shadow-sm">
-                {/* Top Toolbar inside Card */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#2e3036] mb-6">
-                  {/* Underlined Tab Switcher */}
-                  <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0">
-                    <button
-                      onClick={() => setInputMode("url")}
-                      className={`pb-2 text-xs font-semibold tracking-wide transition-all relative cursor-pointer flex-shrink-0 ${
-                        inputMode === "url"
-                          ? "text-[#ffffff] border-b-2 border-[#ff6740] -mb-[18px]"
-                          : "text-[#9ca3af] hover:text-[#ffffff]"
-                      }`}
-                    >
-                      Tempel Link URL
-                    </button>
-                    <button
-                      onClick={() => setInputMode("upload")}
-                      className={`pb-2 text-xs font-semibold tracking-wide transition-all relative cursor-pointer flex-shrink-0 ${
-                        inputMode === "upload"
-                          ? "text-[#ffffff] border-b-2 border-[#ff6740] -mb-[18px]"
-                          : "text-[#9ca3af] hover:text-[#ffffff]"
-                      }`}
-                    >
-                      Upload Manual
-                    </button>
-                    <button
-                      onClick={() => setInputMode("explorer")}
-                      className={`pb-2 text-xs font-semibold tracking-wide transition-all relative cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
-                        inputMode === "explorer"
-                          ? "text-[#ffffff] border-b-2 border-[#ff6740] -mb-[18px]"
-                          : "text-[#9ca3af] hover:text-[#ffffff]"
-                      }`}
-                    >
-                      <Search className="w-3.5 h-3.5 text-[#ff6740]" />
-                      <span>Cari Manga (Explorer)</span>
-                    </button>
-                  </div>
-
-                  {/* Single Tone Selector on the entire screen */}
-                  <button
-                    onClick={() => setShowSettings(!showSettings)}
-                    className="self-start sm:self-auto flex items-center gap-1.5 text-xs font-mono text-[#9ca3af] hover:text-[#ffffff] px-3 py-1.5 rounded-[6px] border border-[#2e3036] bg-[#2a2b30] hover:border-[#9ca3af]/50 transition-all cursor-pointer btn-press"
-                  >
-                    <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
-                    <span>
-                      Gaya: <strong className="text-[#ffffff] font-semibold capitalize">{tone}</strong>
-                    </span>
-                  </button>
-                </div>
-
-                {/* Headline */}
-                <div className="mb-5">
-                  <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[#ffffff] leading-tight tracking-tight">
-                    {inputMode === "explorer" ? (
-                      <>
-                        Cari judul manga.<br />
-                        Pilih bab & terjemahkan otomatis.
-                      </>
-                    ) : inputMode === "upload" ? (
-                      <>
-                        Unggah berkas komik.<br />
-                        Baca dalam bahasa Indonesia.
-                      </>
-                    ) : (
-                      <>
-                        Tempel link chapter.<br />
-                        Baca dalam bahasa Indonesia.
-                      </>
-                    )}
-                  </h1>
-                </div>
-
-                {/* Error Message Alert */}
-                {errorMsg && (
-                  <div className="w-full mb-5 p-3.5 rounded-[6px] bg-[#2a2b30] border border-[#ef4444] text-[#ffffff] text-xs flex items-center gap-2.5 animate-slide-up">
-                    <AlertCircle className="w-4 h-4 text-[#ef4444] flex-shrink-0" strokeWidth={1.5} />
-                    <div className="flex-1">{errorMsg}</div>
-                  </div>
-                )}
-
-                {/* Form Ingest URL */}
-                {inputMode === "url" ? (
-                  <div>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        handleIngestUrl(e);
-                      }}
-                      className="flex flex-col sm:flex-row gap-2"
-                    >
-                      <div className="relative flex-1">
-                        <LinkIcon className="w-4 h-4 text-[#9ca3af] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.5} />
-                        <input
-                          type="text"
-                          required
-                          placeholder="https://... atau kode doujinshi (contoh: 177013)"
-                          value={urlInput}
-                          onChange={(e) => setUrlInput(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 min-h-[44px] rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-[#ffffff] placeholder-[#9ca3af]/60 text-sm transition-colors font-mono"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleIngestUrl()}
-                        disabled={loading || !urlInput.trim()}
-                        className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 flex-shrink-0 btn-press ${
-                          urlInput.trim() && !loading
-                            ? "bg-[#ff6740] hover:bg-[#ff7e59] text-white cursor-pointer shadow-md shadow-[#ff6740]/20"
-                            : "bg-[#2a2b30] border border-[#2e3036] text-[#9ca3af] cursor-not-allowed"
-                        }`}
-                      >
-                        {loading ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
-                            <span>Memindai...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Analisis</span>
-                            <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          </>
-                        )}
-                      </button>
-                    </form>
-
-                    <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs text-[#9ca3af]">
-                      <span>Mendukung: MangaDex, Komikindo, Kiryuu, Manganato, nhentai, dsb.</span>
-                      <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-                        <span className="text-[11px] text-[#9ca3af]">Contoh:</span>
-                        <button
-                          type="button"
-                          onClick={() => setUrlInput(SAMPLE_URL)}
-                          className="text-[#9ca3af] hover:text-[#ffffff] underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
-                        >
-                          MangaDex
-                        </button>
-                        <span>•</span>
-                        <button
-                          type="button"
-                          onClick={() => setUrlInput("177013")}
-                          className="text-[#9ca3af] hover:text-[#ff7e59] underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
-                        >
-                          nhentai #177013
-                        </button>
-                        <span>•</span>
-                        <button
-                          type="button"
-                          onClick={() => setUrlInput("https://komikindo.tv/one-piece-chapter-1100-bahasa-indonesia/")}
-                          className="text-[#9ca3af] hover:text-[#ffffff] underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
-                        >
-                          Komikindo
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : inputMode === "upload" ? (
-                  /* Form Upload Manual */
-                  <form onSubmit={handleManualUpload} className="space-y-4">
-                    <div className="border border-dashed border-[#2e3036] hover:border-[#9ca3af] rounded-[6px] p-8 bg-[#191a1c] text-center transition-colors">
-                      <FileArchive className="w-8 h-8 text-[#9ca3af] mx-auto mb-2" strokeWidth={1.5} />
-                      <h4 className="text-sm font-semibold text-[#ffffff] mb-1">
-                        Pilih file gambar, ZIP, CBZ, atau PDF
-                      </h4>
-                      <p className="text-xs text-[#9ca3af] mb-4">
-                        Gunakan opsi ini jika link web memiliki Cloudflare atau proteksi unduhan
-                      </p>
-                      <input
-                        type="file"
-                        multiple
-                        accept=".zip,.cbz,.pdf,image/png,image/jpeg,image/webp"
-                        onChange={(e) => setSelectedFiles(e.target.files)}
-                        className="block mx-auto text-xs text-[#9ca3af] file:mr-3 file:py-1.5 file:px-3 file:rounded-[4px] file:border-0 file:text-xs file:font-semibold file:bg-[#2a2b30] file:text-[#ffffff] hover:file:bg-[#2e3036] cursor-pointer"
-                      />
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        placeholder="Judul chapter (opsional)"
-                        value={uploadTitle}
-                        onChange={(e) => setUploadTitle(e.target.value)}
-                        className="flex-1 px-4 py-2.5 min-h-[44px] rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-[#ffffff] placeholder-[#9ca3af]/60 text-xs"
-                      />
-                      <button
-                        type="submit"
-                        disabled={loading || !selectedFiles || selectedFiles.length === 0}
-                        className={`px-5 py-2.5 min-h-[44px] rounded-[6px] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 flex-shrink-0 btn-press ${
-                          selectedFiles && selectedFiles.length > 0 && !loading
-                            ? "bg-[#ff6740] hover:bg-[#ff7e59] text-white cursor-pointer shadow-md shadow-[#ff6740]/20"
-                            : "bg-[#2a2b30] border border-[#2e3036] text-[#9ca3af] cursor-not-allowed"
-                        }`}
-                      >
-                        {loading ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
-                            <span>Memproses...</span>
-                          </>
-                        ) : (
-                          "Unggah & Lanjut"
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  /* Form Explorer (Cari Manga Langsung) */
-                  <div className="space-y-4">
-                    {/* Source Provider Selector */}
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                      <span className="text-xs font-mono text-[#9ca3af] flex-shrink-0">Sumber:</span>
+              {/* TAB 1: JELAJAH (HOMEPAGE AUTENTIK MANGADEX) */}
+              {activeNavTab === "jelajah" && (
+                <div className="space-y-6 animate-fade-in">
+                  {/* Top Source Provider Switcher */}
+                  <div className="bg-[#202125] border border-[#2e3036] rounded-[8px] p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                      <span className="text-xs font-mono text-[#9ca3af] flex-shrink-0">Pilih Web:</span>
                       {[
-                        { id: "mangadex", label: "MangaDex (Global)", icon: "🌐" },
-                        { id: "raw", label: "RAW Manga (Jepang/Korea)", icon: "🇯🇵" },
-                        { id: "komikindo", label: "Komik Indo (Komikindo)", icon: "🇮🇩" },
+                        { id: "mangadex", label: "MangaDex (Official Global)", icon: "🌐" },
+                        { id: "komikindo", label: "Komik Indo (Sub Indo)", icon: "🇮🇩" },
                         { id: "nhentai", label: "nhentai (Doujinshi 18+)", icon: "🔞" },
+                        { id: "raw", label: "RAW Manga (Jepang / Korea)", icon: "🇯🇵" },
                       ].map((src) => (
                         <button
                           key={src.id}
                           type="button"
-                          onClick={() => {
-                            const newSrc = src.id as "mangadex" | "raw" | "komikindo" | "nhentai";
-                            setExplorerSource(newSrc);
-                            setSelectedGenres([]);
-                            if (explorerQuery.trim()) {
-                              handleSearchManga(explorerQuery, newSrc, []);
-                            }
-                          }}
-                          className={`px-3 py-1.5 rounded-[6px] text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer btn-press border ${
+                          onClick={() => handleSwitchSource(src.id as any)}
+                          className={`px-3.5 py-1.5 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer btn-press border ${
                             explorerSource === src.id
-                              ? "bg-[#ff6740]/15 border-[#ff6740] text-[#ffffff] font-semibold shadow-sm"
-                              : "bg-[#161617] border-[#2e3036] text-[#9ca3af] hover:text-[#ffffff] hover:border-[#9ca3af]/50"
+                              ? "bg-[#ff6740] border-[#ff6740] text-white shadow-sm shadow-[#ff6740]/25"
+                              : "bg-[#191a1c] border-[#2e3036] text-[#9ca3af] hover:text-white hover:border-[#9ca3af]/50"
                           }`}
                         >
                           <span>{src.icon}</span>
@@ -3515,419 +3338,728 @@ export default function MangaIDApp() {
                       ))}
                     </div>
 
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        handleSearchManga();
-                      }}
-                      className="flex flex-col sm:flex-row gap-2"
-                    >
-                      <div className="relative flex-1">
-                        <Search
-                          className="w-4 h-4 text-[#9ca3af] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                          strokeWidth={1.5}
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleSearchManga("", explorerSource, [])}
+                        disabled={explorerLoading}
+                        className="text-xs font-mono text-[#9ca3af] hover:text-white px-2.5 py-1.5 rounded-[6px] border border-[#2e3036] bg-[#191a1c] hover:bg-[#2a2b30] transition-colors cursor-pointer flex items-center gap-1.5"
+                        title="Segarkan Katalog Populer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${explorerLoading ? "animate-spin text-[#ff6740]" : ""}`} />
+                        <span>Refresh Populer</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* MangaDex Featured Hero Carousel */}
+                  {explorerResults.length > 0 && !explorerQuery.trim() && selectedGenres.length === 0 && (
+                    <div className="relative rounded-[10px] overflow-hidden border border-[#2e3036] bg-[#191a1c] shadow-2xl group min-h-[340px] sm:min-h-[380px]">
+                      {/* Blurred Backdrop */}
+                      {explorerResults[carouselIdx]?.cover_url && (
+                        <div
+                          className="absolute inset-0 bg-cover bg-center blur-2xl opacity-25 scale-125 transition-all duration-700 pointer-events-none"
+                          style={{ backgroundImage: `url(${resolveProxyImage(explorerResults[carouselIdx]?.cover_url)})` }}
                         />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#191a1c] via-[#191a1c]/80 to-transparent pointer-events-none" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-[#191a1c] via-[#191a1c]/80 to-transparent pointer-events-none" />
+
+                      {/* Content */}
+                      <div className="relative z-10 p-5 sm:p-7 md:p-8 flex flex-col md:flex-row items-center md:items-start gap-5 sm:gap-6">
+                        {/* 7:10 Cover Poster */}
+                        <div
+                          onClick={() => explorerResults[carouselIdx] && handleSelectManga(explorerResults[carouselIdx])}
+                          className="aspect-[7/10] w-32 sm:w-44 md:w-48 shrink-0 rounded-[8px] overflow-hidden border border-white/10 shadow-2xl relative cursor-pointer group/poster"
+                        >
+                          {explorerResults[carouselIdx]?.cover_url && (
+                            <img
+                              src={resolveProxyImage(explorerResults[carouselIdx]?.cover_url)}
+                              alt={explorerResults[carouselIdx]?.title}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300"
+                            />
+                          )}
+                          {explorerResults[carouselIdx]?.status && (
+                            <div className={`absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shadow-sm ${
+                              explorerResults[carouselIdx]?.status?.toLowerCase().includes("complete")
+                                ? "bg-blue-600/90 text-white"
+                                : explorerResults[carouselIdx]?.status?.toLowerCase().includes("18+")
+                                ? "bg-rose-600/90 text-white"
+                                : "bg-emerald-600/90 text-white"
+                            }`}>
+                              {explorerResults[carouselIdx]?.status}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Info Column */}
+                        <div className="flex-1 flex flex-col justify-between text-center md:text-left min-w-0">
+                          <div>
+                            <div className="flex items-center justify-center md:justify-start gap-2 mb-2 flex-wrap">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-[#ff6740]/20 text-[#ff6740] border border-[#ff6740]/30 flex items-center gap-1">
+                                <Sparkles className="w-3 h-3" />
+                                <span>POPULER #{carouselIdx + 1}</span>
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#202125] border border-[#2e3036] text-[#9ca3af]">
+                                {explorerSource === "nhentai" ? "🔞 nhentai" : explorerSource === "raw" ? "🇯🇵 RAW" : explorerSource === "komikindo" ? "🇮🇩 Komik Indo" : "🌐 MangaDex"}
+                              </span>
+                              {explorerResults[carouselIdx]?.year && (
+                                <span className="text-[10px] text-[#9ca3af] font-mono">Tahun {explorerResults[carouselIdx]?.year}</span>
+                              )}
+                            </div>
+
+                            <h2
+                              onClick={() => explorerResults[carouselIdx] && handleSelectManga(explorerResults[carouselIdx])}
+                              className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white line-clamp-2 hover:text-[#ff6740] transition-colors cursor-pointer leading-tight mb-2.5"
+                              title={explorerResults[carouselIdx]?.title}
+                            >
+                              {explorerResults[carouselIdx]?.title}
+                            </h2>
+
+                            {/* Tags */}
+                            {explorerResults[carouselIdx]?.tags && explorerResults[carouselIdx]?.tags.length > 0 && (
+                              <div className="flex items-center justify-center md:justify-start gap-1.5 flex-wrap mb-3">
+                                {explorerResults[carouselIdx]?.tags.slice(0, 5).map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="px-2.5 py-0.5 rounded-full text-[10px] bg-[#202125] border border-[#2e3036] text-[#9ca3af]"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Synopsis */}
+                            <p className="text-xs sm:text-sm text-[#9ca3af] line-clamp-3 sm:line-clamp-4 leading-relaxed mb-6">
+                              {explorerResults[carouselIdx]?.description || "Klik tombol di bawah untuk membaca bab lengkap atau menerjemahkan otomatis ke bahasa Indonesia."}
+                            </p>
+                          </div>
+
+                          {/* Action Button */}
+                          <div className="flex items-center justify-center md:justify-start gap-3">
+                            <button
+                              onClick={() => explorerResults[carouselIdx] && handleSelectManga(explorerResults[carouselIdx])}
+                              className="px-5 py-2.5 rounded-[6px] bg-[#ff6740] hover:bg-[#ff7e59] text-white font-semibold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 shadow-lg shadow-[#ff6740]/25 btn-press"
+                            >
+                              <BookOpen className="w-4 h-4" />
+                              <span>Mulai Baca / Lihat Daftar Bab</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Navigation Chevrons */}
+                      {explorerResults.slice(0, 5).length > 1 && (
+                        <>
+                          <button
+                            onClick={() => setCarouselIdx((prev) => (prev - 1 + Math.min(5, explorerResults.length)) % Math.min(5, explorerResults.length))}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/90 text-white/80 hover:text-white border border-white/10 transition-all cursor-pointer z-20"
+                            title="Sebelumnya"
+                          >
+                            <ChevronLeft className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => setCarouselIdx((prev) => (prev + 1) % Math.min(5, explorerResults.length))}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 hover:bg-black/90 text-white/80 hover:text-white border border-white/10 transition-all cursor-pointer z-20"
+                            title="Berikutnya"
+                          >
+                            <ChevronRight className="w-5 h-5" />
+                          </button>
+
+                          {/* Dots */}
+                          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+                            {explorerResults.slice(0, 5).map((_, i) => (
+                              <button
+                                key={i}
+                                onClick={() => setCarouselIdx(i)}
+                                className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                                  carouselIdx === i ? "w-6 bg-[#ff6740]" : "w-1.5 bg-[#9ca3af]/40 hover:bg-[#9ca3af]"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Explore Search & Filter Toolbar */}
+                  <div className="bg-[#202125] border border-[#2e3036] rounded-[8px] p-4 sm:p-5 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-[#9ca3af] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           type="text"
                           placeholder={
                             explorerSource === "raw"
-                              ? "Ketik judul manga RAW Jepang/Korea atau pilih genre di bawah..."
+                              ? "Cari judul manga RAW Jepang/Korea atau pilih genre..."
                               : explorerSource === "nhentai"
-                              ? "Ketik judul/kode doujinshi atau pilih tag 18+ di bawah..."
+                              ? "Cari doujinshi (judul atau kode) atau pilih genre..."
                               : explorerSource === "komikindo"
-                              ? "Ketik judul komik bahasa Indonesia atau pilih genre di bawah..."
-                              : "Ketik judul manga global atau pilih genre di bawah..."
+                              ? "Cari komik bahasa Indonesia atau pilih genre..."
+                              : "Cari manga di MangaDex global atau pilih genre..."
                           }
                           value={explorerQuery}
                           onChange={(e) => setExplorerQuery(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 min-h-[44px] rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-[#ffffff] placeholder-[#9ca3af]/60 text-sm transition-colors"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={explorerLoading || (!explorerQuery.trim() && selectedGenres.length === 0)}
-                        className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 flex-shrink-0 btn-press ${
-                          (explorerQuery.trim() || selectedGenres.length > 0) && !explorerLoading
-                            ? "bg-[#ff6740] hover:bg-[#ff7e59] text-white cursor-pointer shadow-md shadow-[#ff6740]/20"
-                            : "bg-[#2a2b30] border border-[#2e3036] text-[#9ca3af] cursor-not-allowed"
-                        }`}
-                      >
-                        {explorerLoading ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
-                            <span>Mencari...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Cari Manga</span>
-                            <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          </>
-                        )}
-                      </button>
-                    </form>
-
-                    {/* Multi-Select Genre Filter Bar with Real-Time Typing Search */}
-                    <div className="pt-1 pb-1 space-y-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => setShowGenreSearch((prev) => !prev)}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#161617] border border-[#2e3036] hover:border-[#ff6740] text-[#ffffff] text-xs font-mono transition-colors cursor-pointer group"
-                            title="Klik untuk membuka pencarian genre"
-                          >
-                            <Filter className="w-3.5 h-3.5 text-[#ff6740] group-hover:scale-110 transition-transform" />
-                            <span className="font-semibold">
-                              Filter {explorerSource === "nhentai" ? "Tag nhentai" : explorerSource === "komikindo" ? "Genre Komik Indo" : explorerSource === "raw" ? "Genre RAW" : "Genre MangaDex"}
-                            </span>
-                            <span className="text-[10px] text-[#9ca3af]">
-                              ({(SOURCE_GENRES[explorerSource] || []).length} tag)
-                            </span>
-                          </button>
-
-                          {selectedGenres.length > 0 && (
-                            <span className="px-1.5 py-0.5 rounded bg-[#ff6740] text-white text-[10px] font-bold">
-                              {selectedGenres.length} dipilih
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {selectedGenres.length > 0 && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleSearchManga()}
-                                className="px-2.5 py-1 rounded-[4px] bg-[#ff6740] hover:bg-[#ff7e59] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
-                              >
-                                <Search className="w-3 h-3" />
-                                <span>Cari Genre Ini ({selectedGenres.length})</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedGenres([])}
-                                className="text-[11px] font-mono text-[#9ca3af] hover:text-[#ff6740] cursor-pointer"
-                              >
-                                Reset Genre
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Search & Filter Input for the massive genre list */}
-                      <div className="relative flex items-center">
-                        <Search className="w-3.5 h-3.5 text-[#9ca3af] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input
-                          type="text"
-                          placeholder={`Ketik nama genre / tag untuk mencari di antara ${(SOURCE_GENRES[explorerSource] || []).length} genre (contoh: Isekai, Milf, Murim, Cultivation, Romance)...`}
-                          value={genreSearchInput}
-                          onChange={(e) => setGenreSearchInput(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault();
-                              const q = genreSearchInput.trim().toLowerCase();
-                              if (!q) return;
-                              const match = (SOURCE_GENRES[explorerSource] || []).find((g) => g.toLowerCase() === q)
-                                || (SOURCE_GENRES[explorerSource] || []).find((g) => g.toLowerCase().includes(q));
-                              const tagToAdd = match || genreSearchInput.trim();
-                              if (tagToAdd && !selectedGenres.includes(tagToAdd)) {
-                                toggleGenre(tagToAdd);
-                              }
-                              setGenreSearchInput("");
+                              handleSearchManga();
                             }
                           }}
-                          className="w-full pl-9 pr-8 py-2 rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] text-xs text-[#ffffff] placeholder-[#9ca3af]/60 outline-none transition-colors"
+                          className="w-full pl-10 pr-10 py-2.5 rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-white placeholder-[#9ca3af]/60 text-xs sm:text-sm transition-colors font-mono"
                         />
-                        {genreSearchInput && (
+                        {explorerQuery && (
                           <button
-                            type="button"
-                            onClick={() => setGenreSearchInput("")}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#ffffff] cursor-pointer p-0.5"
+                            onClick={() => {
+                              setExplorerQuery("");
+                              handleSearchManga("", explorerSource, selectedGenres);
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-white p-1"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
 
-                      {/* Search Result Count or Hint */}
-                      <div className="flex items-center justify-between text-[10px] font-mono text-[#9ca3af] px-1">
-                        <span>Menampilkan {visibleGenres.length} dari {(SOURCE_GENRES[explorerSource] || []).length} genre resmi</span>
-                        {genreSearchInput && (
-                          <span>Filter pencarian: &quot;{genreSearchInput}&quot;</span>
+                      <button
+                        type="button"
+                        onClick={() => handleSearchManga()}
+                        disabled={explorerLoading}
+                        className="px-6 py-2.5 rounded-[6px] bg-[#ff6740] hover:bg-[#ff7e59] text-white font-semibold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#ff6740]/20 btn-press"
+                      >
+                        {explorerLoading ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <span>Cari</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </>
                         )}
-                      </div>
+                      </button>
+                    </div>
 
-                      {/* Selected Genres Badges (Pinned at top when selected) */}
-                      {selectedGenres.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap p-2 rounded-[6px] bg-[#161617]/70 border border-[#2e3036]">
-                          <span className="text-[10px] font-mono text-[#9ca3af] mr-1">Filter Aktif:</span>
-                          {selectedGenres.map((g) => (
-                            <span
-                              key={g}
-                              className="px-2 py-0.5 rounded-full bg-[#ff6740] text-white text-[11px] font-semibold flex items-center gap-1 shadow-sm"
-                            >
-                              <span>{g}</span>
-                              <button
-                                type="button"
-                                onClick={() => toggleGenre(g)}
-                                className="hover:text-black/80 cursor-pointer"
-                              >
-                                <X className="w-2.5 h-2.5" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                    {/* Quick Genre Pills + Full Genre Modal Toggle */}
+                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <span className="text-[#9ca3af] font-mono mr-1">Genre:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedGenres([]);
+                          handleSearchManga(explorerQuery, explorerSource, []);
+                        }}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer border ${
+                          selectedGenres.length === 0
+                            ? "bg-[#ff6740] border-[#ff6740] text-white shadow-sm"
+                            : "bg-[#191a1c] border-[#2e3036] text-[#9ca3af] hover:text-white"
+                        }`}
+                      >
+                        Semua
+                      </button>
 
-                      {/* Genre List Pills with wrap & scroll */}
-                      <div className="flex items-center gap-1.5 max-h-56 overflow-y-auto flex-wrap pb-1 pr-1 scrollbar-thin">
-                        {visibleGenres.map((genre) => {
-                          const isSelected = selectedGenres.includes(genre);
-                          return (
-                            <button
-                              key={genre}
-                              type="button"
-                              onClick={() => toggleGenre(genre)}
-                              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1 cursor-pointer btn-press border whitespace-nowrap ${
-                                isSelected
-                                  ? "bg-[#ff6740] border-[#ff6740] text-white font-semibold shadow-sm"
-                                  : "bg-[#161617] border-[#2e3036] text-[#9ca3af] hover:text-[#ffffff] hover:border-[#9ca3af]/50"
-                              }`}
-                            >
-                              {isSelected && <Check className="w-3 h-3 text-white" />}
-                              <span>{genre}</span>
-                            </button>
-                          );
-                        })}
-
-                        {/* Add custom tag button if not matched */}
-                        {genreSearchInput.trim() && !visibleGenres.some((g) => g.toLowerCase() === genreSearchInput.trim().toLowerCase()) && (
+                      {(explorerSource === "nhentai"
+                        ? ["Romance", "School", "Comedy", "Color", "English", "Vanilla", "Big Breasts"]
+                        : ["Action", "Romance", "Fantasy", "Comedy", "Isekai", "Slice of Life", "Drama", "Supernatural", "Martial Arts", "Horror"]
+                      ).map((genre) => {
+                        const isSelected = selectedGenres.includes(genre);
+                        return (
                           <button
+                            key={genre}
                             type="button"
                             onClick={() => {
-                              toggleGenre(genreSearchInput.trim());
-                              setGenreSearchInput("");
+                              const next = isSelected ? selectedGenres.filter((g) => g !== genre) : [...selectedGenres, genre];
+                              setSelectedGenres(next);
+                              handleSearchManga(explorerQuery, explorerSource, next);
                             }}
-                            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#ff6740]/20 border border-[#ff6740] text-[#ffffff] hover:bg-[#ff6740] hover:text-white transition-all flex items-center gap-1 cursor-pointer"
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer border ${
+                              isSelected
+                                ? "bg-[#ff6740] border-[#ff6740] text-white font-semibold shadow-sm"
+                                : "bg-[#191a1c] border-[#2e3036] text-[#9ca3af] hover:text-white hover:border-[#9ca3af]/40"
+                            }`}
                           >
-                            <span>+ Tambah Tag "{genreSearchInput.trim()}"</span>
+                            {genre}
                           </button>
-                        )}
-                      </div>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowGenreSearch(!showGenreSearch)}
+                        className="px-3 py-1 rounded-full bg-[#2a2b30] border border-[#2e3036] text-[#9ca3af] hover:text-white hover:border-[#ff6740]/60 transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
+                      >
+                        <SlidersHorizontal className="w-3 h-3 text-[#ff6740]" />
+                        <span>{showGenreSearch ? "Tutup Filter" : `Semua Genre (${visibleGenres.length})`}</span>
+                      </button>
                     </div>
 
-                    {/* Quick suggestion tags */}
-                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
-                      <span className="text-[#9ca3af] font-mono mr-1">Rekomendasi:</span>
-                      {(explorerSource === "raw"
-                        ? ["Oshi no Ko", "Jujutsu Kaisen", "Frieren", "Chainsaw Man", "Dandadan", "Kingdom"]
-                        : explorerSource === "nhentai"
-                        ? ["177013", "Romance", "School", "Comedy", "Color", "English"]
-                        : explorerSource === "komikindo"
-                        ? ["One Piece", "Jujutsu Kaisen", "Solo Leveling", "Tower of God", "Magic Emperor", "Martial Peak"]
-                        : ["One Piece", "Jujutsu Kaisen", "Solo Leveling", "Chainsaw Man", "Dandadan", "Oshi no Ko"]
-                      ).map((tag) => (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => {
-                            setExplorerQuery(tag);
-                            handleSearchManga(tag);
-                          }}
-                          className="px-2.5 py-1 rounded-full bg-[#2a2b30] border border-[#2e3036] hover:border-[#ff6740]/60 hover:text-[#ffffff] text-[#9ca3af] transition-all text-xs cursor-pointer btn-press hover:scale-105"
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Explorer Results Display */}
-                    {explorerLoading ? (
-                      <div className="py-12 flex flex-col items-center justify-center gap-3 text-[#9ca3af] animate-fade-in">
-                        <RefreshCw className="w-6 h-6 animate-spin text-[#ff6740]" />
-                        <span className="text-xs font-mono animate-pulse-subtle">
-                          {explorerSource === "raw"
-                            ? "Menghubungi katalog rilis asli RAW (Jepang/Korea)..."
-                            : explorerSource === "nhentai"
-                            ? "Menghubungi katalog doujinshi nhentai..."
-                            : explorerSource === "komikindo"
-                            ? "Menghubungi server komik scanlation Indonesia..."
-                            : "Menghubungi katalog resmi MangaDex..."}
-                        </span>
-                      </div>
-                    ) : filteredExplorerResults.length > 0 ? (
-                      <div className="pt-2 animate-fade-in">
-                        <div className="flex items-center justify-between text-xs text-[#9ca3af] font-mono mb-3">
-                          <span>
-                            Ditemukan {filteredExplorerResults.length} hasil untuk "{explorerQuery}"
-                            {selectedGenres.length > 0 && ` (Filter Genre: ${selectedGenres.join(", ")})`}:
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-                          {filteredExplorerResults.map((manga) => (
-                            <div
-                              key={manga.id}
-                              onClick={() => handleSelectManga(manga)}
-                              className="group flex flex-col rounded-md border border-[#2e3036] bg-[#202125] hover:border-[#ff6740]/50 overflow-hidden card-lift cursor-pointer transition-all duration-200"
+                    {/* Full Genre Dropdown Panel */}
+                    {showGenreSearch && (
+                      <div className="pt-3 border-t border-[#2e3036] space-y-3 animate-fade-in">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-mono text-[#9ca3af]">Daftar Lengkap Genre ({visibleGenres.length} genre):</span>
+                          {selectedGenres.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedGenres([]);
+                                handleSearchManga(explorerQuery, explorerSource, []);
+                              }}
+                              className="text-[11px] text-[#ff6740] hover:underline cursor-pointer"
                             >
-                              {/* 7:10 Cover Poster (MangaDex standard aspect ratio) */}
-                              <div className="aspect-[7/10] relative bg-[#2a2b30] overflow-hidden">
-                                {manga.cover_url ? (
-                                  <img
-                                    src={resolveProxyImage(manga.cover_url)}
-                                    alt={manga.title}
-                                    loading="lazy"
-                                    referrerPolicy="no-referrer"
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
-                                    onError={(e) => {
-                                      (e.target as HTMLElement).style.display = "none";
-                                    }}
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-[#9ca3af] text-xs p-2 text-center">
-                                    No Cover
-                                  </div>
-                                )}
-                                
-                                {/* Bottom dark gradient for text readability */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
-
-                                {manga.status && (
-                                  <div className={`absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shadow-sm ${
-                                    manga.status.toLowerCase().includes("complete")
-                                      ? "bg-blue-600/90 text-white"
-                                      : manga.status.toLowerCase().includes("18+")
-                                      ? "bg-rose-600/90 text-white"
-                                      : "bg-emerald-600/90 text-white"
-                                  }`}>
-                                    {manga.status}
-                                  </div>
-                                )}
-
-                                {manga.source && (
-                                  <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide border border-white/10 bg-black/75 backdrop-blur text-white shadow-sm">
-                                    {manga.source === "nhentai" ? "🔞 nhentai" : manga.source === "raw" ? "🇯🇵 RAW" : manga.source === "komikindo" ? "🇮🇩 Komik Indo" : "🌐 MangaDex"}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Info */}
-                              <div className="p-3 flex-1 flex flex-col justify-between">
-                                <div>
-                                  <h4
-                                    className="text-sm font-semibold text-white line-clamp-2 group-hover:text-[#ff6740] transition-colors leading-snug"
-                                    title={manga.title}
-                                  >
-                                    {manga.title}
-                                  </h4>
-                                  <div className="flex items-center gap-1 flex-wrap mt-2">
-                                    {manga.year && (
-                                      <span className="text-[10px] text-[#9ca3af] font-medium mr-1">{manga.year}</span>
-                                    )}
-                                    {manga.tags.slice(0, 3).map((t) => {
-                                      const isMatched = selectedGenres.some(sg => sg.toLowerCase() === t.toLowerCase());
-                                      return (
-                                        <span
-                                          key={t}
-                                          className={`px-2 py-0.5 rounded-full text-[10px] ${
-                                            isMatched
-                                              ? "bg-[#ff6740] text-white font-bold"
-                                              : "bg-[#2a2b30] text-[#9ca3af] hover:text-white"
-                                          }`}
-                                        >
-                                          {t}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  className="mt-2.5 w-full py-1.5 px-2 rounded-[4px] bg-[#2a2b30] group-hover:bg-[#ff6740] text-[#ffffff] group-hover:text-white text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
-                                >
-                                  <BookOpen className="w-3 h-3" />
-                                  <span>Pilih Bab</span>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                              Reset Pilihan ({selectedGenres.length})
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    ) : explorerHasSearched ? (
-                      <div className="p-8 text-center rounded-[6px] border border-[#2e3036] bg-[#191a1c] text-[#9ca3af] text-xs">
-                        Tidak ada komik yang ditemukan dengan kata kunci "{explorerQuery}". Silakan coba kata kunci lain.
-                      </div>
-                    ) : (
-                      <div className="p-6 text-center rounded-[6px] border border-dashed border-[#2e3036] bg-[#191a1c] text-[#9ca3af] text-xs">
-                        Ketik nama manga di atas atau klik salah satu rekomendasi untuk melihat katalog langsung dari MangaDex.
+
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-[#9ca3af] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="Ketik untuk memfilter genre..."
+                            value={genreSearchInput}
+                            onChange={(e) => setGenreSearchInput(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-white placeholder-[#9ca3af]/50"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                          {visibleGenres.map((genre) => {
+                            const isSelected = selectedGenres.includes(genre);
+                            return (
+                              <button
+                                key={genre}
+                                type="button"
+                                onClick={() => {
+                                  const next = isSelected ? selectedGenres.filter((g) => g !== genre) : [...selectedGenres, genre];
+                                  setSelectedGenres(next);
+                                  handleSearchManga(explorerQuery, explorerSource, next);
+                                }}
+                                className={`px-2.5 py-1 rounded-[4px] text-[11px] transition-all cursor-pointer border ${
+                                  isSelected
+                                    ? "bg-[#ff6740] border-[#ff6740] text-white font-semibold"
+                                    : "bg-[#191a1c] border-[#2e3036] text-[#9ca3af] hover:text-white"
+                                }`}
+                              >
+                                {genre}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              {/* Koleksi Seri Manga Shelf */}
-              <div id="bab-tersimpan-section" className="space-y-4 pt-2">
-                {/* Header Row: Title on Left, Search + Filter on Right */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-baseline gap-2">
-                    <h2 className="font-display text-lg font-bold text-[#ffffff]">
-                      Koleksi Seri Manga
+                  {/* Catalog Grid */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                          <span>
+                            {explorerQuery.trim()
+                              ? `Hasil Pencarian: "${explorerQuery}"`
+                              : selectedGenres.length > 0
+                              ? `Filter Genre: ${selectedGenres.join(", ")}`
+                              : `🔥 Manga Terpopuler (${explorerSource === "nhentai" ? "nhentai" : explorerSource === "raw" ? "RAW Manga" : explorerSource === "komikindo" ? "Komik Indo" : "MangaDex"})`}
+                          </span>
+                        </h3>
+                        <span className="text-xs text-[#9ca3af] font-mono">
+                          {filteredExplorerResults.length} judul manga ditemukan
+                        </span>
+                      </div>
+                    </div>
+
+                    {explorerLoading ? (
+                      <div className="py-20 flex flex-col items-center justify-center gap-3 text-[#9ca3af] animate-fade-in">
+                        <RefreshCw className="w-8 h-8 animate-spin text-[#ff6740]" />
+                        <span className="text-xs font-mono animate-pulse-subtle">
+                          Memuat katalog manga terpopuler...
+                        </span>
+                      </div>
+                    ) : filteredExplorerResults.length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4 animate-fade-in">
+                        {filteredExplorerResults.map((manga) => (
+                          <div
+                            key={manga.id}
+                            onClick={() => handleSelectManga(manga)}
+                            className="group flex flex-col rounded-[8px] border border-[#2e3036] bg-[#202125] hover:border-[#ff6740]/60 overflow-hidden card-lift cursor-pointer transition-all duration-200"
+                          >
+                            {/* 7:10 Cover Poster */}
+                            <div className="aspect-[7/10] relative bg-[#2a2b30] overflow-hidden">
+                              {manga.cover_url ? (
+                                <img
+                                  src={resolveProxyImage(manga.cover_url)}
+                                  alt={manga.title}
+                                  referrerPolicy="no-referrer"
+                                  loading="lazy"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center text-[#9ca3af]">
+                                  <BookOpen className="w-8 h-8 mb-1.5 opacity-40" />
+                                  <span className="text-[10px]">{manga.title}</span>
+                                </div>
+                              )}
+
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+
+                              {manga.status && (
+                                <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shadow-sm ${
+                                  manga.status.toLowerCase().includes("complete")
+                                    ? "bg-blue-600/90 text-white"
+                                    : manga.status.toLowerCase().includes("18+")
+                                    ? "bg-rose-600/90 text-white"
+                                    : "bg-emerald-600/90 text-white"
+                                }`}>
+                                  {manga.status}
+                                </div>
+                              )}
+
+                              {manga.source && (
+                                <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-semibold tracking-wide border border-white/10 bg-black/75 backdrop-blur text-white shadow-sm">
+                                  {manga.source === "nhentai" ? "🔞 nhentai" : manga.source === "raw" ? "🇯🇵 RAW" : manga.source === "komikindo" ? "🇮🇩 Komik Indo" : "🌐 MangaDex"}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Info */}
+                            <div className="p-3 flex-1 flex flex-col justify-between">
+                              <div>
+                                <h4
+                                  className="text-xs sm:text-sm font-semibold text-white line-clamp-2 group-hover:text-[#ff6740] transition-colors leading-snug"
+                                  title={manga.title}
+                                >
+                                  {manga.title}
+                                </h4>
+                                <div className="flex items-center gap-1 flex-wrap mt-2">
+                                  {manga.year && (
+                                    <span className="text-[10px] text-[#9ca3af] font-mono mr-1">{manga.year}</span>
+                                  )}
+                                  {manga.tags.slice(0, 2).map((t) => (
+                                    <span
+                                      key={t}
+                                      className="px-1.5 py-0.2 rounded text-[9px] bg-[#2a2b30] text-[#9ca3af]"
+                                    >
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="mt-2.5 w-full py-1.5 px-2 rounded-[4px] bg-[#2a2b30] group-hover:bg-[#ff6740] text-white text-[11px] font-semibold transition-colors flex items-center justify-center gap-1 shadow-sm"
+                              >
+                                <BookOpen className="w-3 h-3" />
+                                <span>Lihat Bab</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-12 text-center rounded-[8px] border border-[#2e3036] bg-[#202125] text-[#9ca3af] text-xs">
+                        Tidak ada komik yang ditemukan. Coba ganti kata kunci atau pilih genre lain.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: PENERJEMAH (STUDIO TRANSLASI DEDIKASI) */}
+              {activeNavTab === "penerjemah" && (
+                <div className="space-y-6 animate-fade-in">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                      <Languages className="w-6 h-6 text-[#ff6740]" />
+                      <span>Studio Penerjemah Komik AI</span>
                     </h2>
-                    <span className="font-mono text-xs text-[#9ca3af]">
-                      ({filteredSeries.length} seri • {savedChapters.length} total bab)
-                    </span>
+                    <p className="text-xs sm:text-sm text-[#9ca3af] mt-1">
+                      Terjemahkan bab komik langsung dari link web manga atau unggah berkas arsip Anda (CBZ, ZIP, PDF) ke Bahasa Indonesia secara instan.
+                    </p>
                   </div>
 
-                  {/* Search, Backup, Import and Dropdown Filter */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-[#9ca3af] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.5} />
+                  {/* Main Translation Card */}
+                  <div className="bg-[#202125] border border-[#2e3036] rounded-[8px] p-5 sm:p-6 shadow-sm">
+                    {/* Mode Switcher */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#2e3036] mb-6">
+                      <div className="flex items-center gap-4 sm:gap-6">
+                        <button
+                          onClick={() => setTranslatorMode("url")}
+                          className={`pb-2 text-xs font-semibold tracking-wide transition-all relative cursor-pointer ${
+                            translatorMode === "url"
+                              ? "text-white border-b-2 border-[#ff6740] -mb-[18px]"
+                              : "text-[#9ca3af] hover:text-white"
+                          }`}
+                        >
+                          Tempel Link URL Web
+                        </button>
+                        <button
+                          onClick={() => setTranslatorMode("upload")}
+                          className={`pb-2 text-xs font-semibold tracking-wide transition-all relative cursor-pointer ${
+                            translatorMode === "upload"
+                              ? "text-white border-b-2 border-[#ff6740] -mb-[18px]"
+                              : "text-[#9ca3af] hover:text-white"
+                          }`}
+                        >
+                          Upload Berkas Komik (CBZ/ZIP/PDF)
+                        </button>
+                      </div>
+
+                      {/* Tone Switcher */}
+                      <button
+                        onClick={() => setShowSettings(!showSettings)}
+                        className="self-start sm:self-auto flex items-center gap-1.5 text-xs font-mono text-[#9ca3af] hover:text-white px-3 py-1.5 rounded-[6px] border border-[#2e3036] bg-[#2a2b30] hover:border-[#9ca3af]/50 transition-all cursor-pointer btn-press"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-[#ff6740]" strokeWidth={1.5} />
+                        <span>
+                          Gaya: <strong className="text-white font-semibold capitalize">{tone}</strong>
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Mode 1: URL Form */}
+                    {translatorMode === "url" ? (
+                      <div className="space-y-4">
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleIngestUrl(e);
+                          }}
+                          className="flex flex-col sm:flex-row gap-2"
+                        >
+                          <div className="relative flex-1">
+                            <LinkIcon className="w-4 h-4 text-[#9ca3af] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.5} />
+                            <input
+                              type="text"
+                              required
+                              placeholder="https://... atau kode doujinshi (contoh: 177013)"
+                              value={urlInput}
+                              onChange={(e) => setUrlInput(e.target.value)}
+                              className="w-full pl-10 pr-4 py-3 min-h-[44px] rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-white placeholder-[#9ca3af]/60 text-sm transition-colors font-mono"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleIngestUrl()}
+                            disabled={loading || !urlInput.trim()}
+                            className={`px-6 py-3 min-h-[44px] rounded-[6px] font-semibold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 flex-shrink-0 btn-press ${
+                              urlInput.trim() && !loading
+                                ? "bg-[#ff6740] hover:bg-[#ff7e59] text-white cursor-pointer shadow-md shadow-[#ff6740]/20"
+                                : "bg-[#2a2b30] border border-[#2e3036] text-[#9ca3af] cursor-not-allowed"
+                            }`}
+                          >
+                            {loading ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
+                                <span>Memindai...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Analisis & Terjemahkan</span>
+                                <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.5} />
+                              </>
+                            )}
+                          </button>
+                        </form>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs text-[#9ca3af]">
+                          <span>Mendukung: MangaDex, Komikindo, Kiryuu, Manganato, nhentai, dsb.</span>
+                          <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                            <span className="text-[11px] text-[#9ca3af]">Contoh cepat:</span>
+                            <button
+                              type="button"
+                              onClick={() => setUrlInput(SAMPLE_URL)}
+                              className="text-[#9ca3af] hover:text-white underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
+                            >
+                              MangaDex
+                            </button>
+                            <span>•</span>
+                            <button
+                              type="button"
+                              onClick={() => setUrlInput("177013")}
+                              className="text-[#9ca3af] hover:text-[#ff7e59] underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
+                            >
+                              nhentai #177013
+                            </button>
+                            <span>•</span>
+                            <button
+                              type="button"
+                              onClick={() => setUrlInput("https://komikindo.tv/one-piece-chapter-1100-bahasa-indonesia/")}
+                              className="text-[#9ca3af] hover:text-white underline underline-offset-2 transition-colors cursor-pointer text-[11px]"
+                            >
+                              Komikindo
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Mode 2: Manual Upload Form */
+                      <form onSubmit={handleManualUpload} className="space-y-4">
+                        <div className="border border-dashed border-[#2e3036] hover:border-[#ff6740]/60 rounded-[8px] p-8 bg-[#191a1c] text-center transition-colors">
+                          <FileArchive className="w-8 h-8 text-[#ff6740] mx-auto mb-2" strokeWidth={1.5} />
+                          <h4 className="text-sm font-semibold text-white mb-1">
+                            Pilih file gambar, ZIP, CBZ, atau PDF
+                          </h4>
+                          <p className="text-xs text-[#9ca3af] mb-4">
+                            Gunakan opsi ini jika file ada di komputer Anda atau situs sumber terproteksi
+                          </p>
+                          <input
+                            type="file"
+                            multiple
+                            accept=".zip,.cbz,.pdf,image/png,image/jpeg,image/webp"
+                            onChange={(e) => setSelectedFiles(e.target.files)}
+                            className="block mx-auto text-xs text-[#9ca3af] file:mr-3 file:py-1.5 file:px-3 file:rounded-[4px] file:border-0 file:text-xs file:font-semibold file:bg-[#2a2b30] file:text-white hover:file:bg-[#2e3036] cursor-pointer"
+                          />
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="text"
+                            placeholder="Judul chapter (opsional)"
+                            value={uploadTitle}
+                            onChange={(e) => setUploadTitle(e.target.value)}
+                            className="flex-1 px-4 py-2.5 min-h-[44px] rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-white placeholder-[#9ca3af]/60 text-xs"
+                          />
+                          <button
+                            type="submit"
+                            disabled={loading || !selectedFiles || selectedFiles.length === 0}
+                            className={`px-5 py-2.5 min-h-[44px] rounded-[6px] text-xs font-semibold transition-all flex items-center justify-center gap-1.5 flex-shrink-0 btn-press ${
+                              selectedFiles && selectedFiles.length > 0 && !loading
+                                ? "bg-[#ff6740] hover:bg-[#ff7e59] text-white cursor-pointer shadow-md shadow-[#ff6740]/20"
+                                : "bg-[#2a2b30] border border-[#2e3036] text-[#9ca3af] cursor-not-allowed"
+                            }`}
+                          >
+                            {loading ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
+                                <span>Memproses...</span>
+                              </>
+                            ) : (
+                              "Unggah & Lanjut"
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+
+                  {/* Guide & Technology Card */}
+                  <div className="bg-[#202125] border border-[#2e3036] rounded-[8px] p-5 text-xs text-[#9ca3af] space-y-3">
+                    <div className="font-semibold text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-[#ff6740]" />
+                      <span>Keunggulan Mesin AI MangaID</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                      <div className="p-3 rounded-[6px] bg-[#191a1c] border border-[#2e3036]">
+                        <div className="font-semibold text-white mb-1">🎯 Deteksi Gelembung & Teks Cerdas</div>
+                        <div>Mendeteksi balon teks vertikal dan horizontal Jepang/Korea secara presisi tanpa merusak ilustrasi latar.</div>
+                      </div>
+                      <div className="p-3 rounded-[6px] bg-[#191a1c] border border-[#2e3036]">
+                        <div className="font-semibold text-white mb-1">💬 Bahasa Alami & Kontekstual</div>
+                        <div>Terjemahan santai/gaul khas komik Indonesia dengan mempertahankan honorifik dan nuansa emosional cerita.</div>
+                      </div>
+                      <div className="p-3 rounded-[6px] bg-[#191a1c] border border-[#2e3036]">
+                        <div className="font-semibold text-white mb-1">🎧 Narasi Suara Audiobook</div>
+                        <div>Dengarkan narasi suara AI otomatis per slide halaman untuk pengalaman membaca santai tanpa lelah mata.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: KOLEKSI (HALAMAN PERPUSTAKAAN DEDIKASI) */}
+              {activeNavTab === "koleksi" && (
+                <div id="bab-tersimpan-section" className="space-y-6 animate-fade-in">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                      <BookOpen className="w-6 h-6 text-[#ff6740]" />
+                      <span>Koleksi & Riwayat Baca Saya</span>
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#9ca3af] mt-1">
+                      Semua judul manga dan bab yang telah Anda simpan dan terjemahkan, tersimpan permanen di database lokal perangkat Anda.
+                    </p>
+                  </div>
+
+                  {/* 3 Summary Stat Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div className="p-4 rounded-[8px] bg-[#202125] border border-[#2e3036] flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-[6px] bg-[#ff6740]/15 flex items-center justify-center text-[#ff6740]">
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xl font-extrabold text-white">{filteredSeries.length}</div>
+                        <div className="text-xs text-[#9ca3af]">Total Seri Manga</div>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-[8px] bg-[#202125] border border-[#2e3036] flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-[6px] bg-blue-500/15 flex items-center justify-center text-blue-400">
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xl font-extrabold text-white">{savedChapters.length}</div>
+                        <div className="text-xs text-[#9ca3af]">Total Bab Tersimpan</div>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-[8px] bg-[#202125] border border-[#2e3036] flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-[6px] bg-emerald-500/15 flex items-center justify-center text-emerald-400">
+                        <Check className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xl font-extrabold text-white">{totalRenderedPagesAll}</div>
+                        <div className="text-xs text-[#9ca3af]">Halaman Selesai Diterjemahkan</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Controls Toolbar: Search, Filter, Export/Import */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-[#202125] border border-[#2e3036] rounded-[8px]">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="w-3.5 h-3.5 text-[#9ca3af] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input
                         type="text"
                         placeholder="Cari judul seri manga..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#202125] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-[#ffffff] placeholder-[#9ca3af]/60 w-36 sm:w-48 transition-colors"
+                        className="w-full pl-8 pr-3 py-1.5 text-xs rounded-[6px] bg-[#191a1c] border border-[#2e3036] focus:border-[#ff6740] focus:outline-none text-white placeholder-[#9ca3af]/60"
                       />
                       {searchQuery && (
                         <button
                           onClick={() => setSearchQuery("")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#ffffff] p-0.5 cursor-pointer"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-white p-0.5 cursor-pointer"
                         >
                           <X className="w-3 h-3" />
                         </button>
                       )}
                     </div>
 
-                    <select
-                      value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value)}
-                      className="py-1.5 px-3 text-xs rounded-[6px] bg-[#202125] border border-[#2e3036] text-[#ffffff] focus:border-[#ff6740] focus:outline-none cursor-pointer"
-                    >
-                      <option value="all">Semua</option>
-                      <option value="done">Selesai</option>
-                    </select>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={filterStatus}
+                        onChange={(e) => setFilterStatus(e.target.value)}
+                        className="py-1.5 px-3 text-xs rounded-[6px] bg-[#191a1c] border border-[#2e3036] text-white focus:border-[#ff6740] focus:outline-none cursor-pointer"
+                      >
+                        <option value="all">Semua Status</option>
+                        <option value="done">Selesai 100%</option>
+                      </select>
 
-                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={handleExportHistory}
                         title="Unduh backup riwayat & database komik Anda (JSON)"
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-[6px] bg-[#2a2b30] border border-[#2e3036] hover:border-[#9ca3af] text-[#ffffff] text-xs font-mono transition-colors cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#2a2b30] border border-[#2e3036] hover:border-[#9ca3af] text-white text-xs font-mono transition-colors cursor-pointer"
                       >
-                        <Download className="w-3.5 h-3.5 text-[#9ca3af]" />
-                        <span className="hidden sm:inline">Backup</span>
+                        <Download className="w-3.5 h-3.5 text-[#ff6740]" />
+                        <span>Backup JSON</span>
                       </button>
 
                       <label
                         title="Pulihkan database riwayat komik dari file backup JSON"
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-[6px] bg-[#2a2b30] border border-[#2e3036] hover:border-[#ff6740] text-[#ffffff] text-xs font-mono transition-colors cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#2a2b30] border border-[#2e3036] hover:border-[#ff6740] text-white text-xs font-mono transition-colors cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5 text-[#ff6740]" />
-                        <span className="hidden sm:inline">Pulihkan</span>
+                        <span>Pulihkan</span>
                         <input
                           type="file"
                           accept=".json"
@@ -3935,100 +4067,119 @@ export default function MangaIDApp() {
                           className="hidden"
                         />
                       </label>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowSyncModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#2a2b30] border border-[#2e3036] hover:border-[#ff6740] text-white text-xs font-mono transition-colors cursor-pointer"
+                        title="Sinkronisasi ID Perangkat"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-[#9ca3af]" />
+                        <span>Sinkron ID</span>
+                      </button>
                     </div>
                   </div>
-                </div>
 
-                {/* Grid of Series Master Cards */}
-                {filteredSeries.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
-                    {filteredSeries.map((series) => (
-                      <div
-                        key={series.title}
-                        className="group flex flex-col bg-[#202125] border border-[#2e3036] rounded-[6px] overflow-hidden card-lift"
-                      >
-                        {/* 2:3 Cover Thumbnail */}
+                  {/* Series Grid */}
+                  {filteredSeries.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
+                      {filteredSeries.map((series) => (
                         <div
-                          onClick={() => setSelectedSeries(series)}
-                          className="aspect-[2/3] bg-[#2a2b30] relative overflow-hidden flex items-center justify-center cursor-pointer"
+                          key={series.title}
+                          className="group flex flex-col bg-[#202125] border border-[#2e3036] rounded-[8px] overflow-hidden card-lift"
                         >
-                          <img
-                            src={`${BACKEND_URL}/api/chapters/${series.coverChapterId}/pages/1/original`}
-                            alt={series.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = "none";
-                            }}
-                          />
-                          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] bg-[#191a1c]/85 border border-[#2e3036] font-mono text-[10px] text-[#ffffff] flex items-center gap-1 shadow-sm transition-transform group-hover:scale-105">
-                            <Layers className="w-3 h-3 text-[#ff6740]" />
-                            <span>{series.totalChapters} Bab</span>
+                          <div
+                            onClick={() => setSelectedSeries(series)}
+                            className="aspect-[7/10] bg-[#2a2b30] relative overflow-hidden flex items-center justify-center cursor-pointer"
+                          >
+                            <img
+                              src={`${BACKEND_URL}/api/chapters/${series.coverChapterId}/pages/1/original`}
+                              alt={series.title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = "none";
+                              }}
+                            />
+                            <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[4px] bg-black/80 border border-white/10 font-mono text-[10px] text-white flex items-center gap-1 shadow-sm">
+                              <Layers className="w-3 h-3 text-[#ff6740]" />
+                              <span>{series.totalChapters} Bab</span>
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="p-3 flex-1 flex flex-col justify-between">
-                          <div>
-                            <div className="flex items-center justify-between gap-1">
-                              <h4
+                          <div className="p-3 flex-1 flex flex-col justify-between">
+                            <div>
+                              <div className="flex items-center justify-between gap-1">
+                                <h4
+                                  onClick={() => setSelectedSeries(series)}
+                                  className="text-xs font-bold text-white truncate flex-1 cursor-pointer hover:text-[#ff6740] transition-colors"
+                                  title={series.title}
+                                >
+                                  {series.title}
+                                </h4>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenRename({
+                                      type: "series",
+                                      oldTitle: series.title,
+                                      currentTitle: series.title,
+                                    });
+                                  }}
+                                  className="text-[#9ca3af] hover:text-white p-0.5 transition-colors cursor-pointer btn-press"
+                                  title="Ubah Nama Seri"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              </div>
+                              <div className="font-mono text-[11px] text-[#9ca3af] mt-0.5">
+                                {series.totalRenderedPages}/{series.totalPages} hal selesai
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-[#2e3036]">
+                              <button
                                 onClick={() => setSelectedSeries(series)}
-                                className="font-display text-xs font-bold text-[#ffffff] truncate flex-1 cursor-pointer hover:text-[#ff6740] transition-colors"
-                                title={series.title}
+                                className="flex-1 min-h-[34px] py-1 px-2 rounded-[6px] bg-[#ff6740] hover:bg-[#ff7e59] text-white text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1 btn-press shadow-sm"
                               >
-                                {series.title}
-                              </h4>
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span>Buka Bab ({series.totalChapters})</span>
+                              </button>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleOpenRename({
+                                  setDeleteTarget({
                                     type: "series",
-                                    oldTitle: series.title,
-                                    currentTitle: series.title,
+                                    title: series.title,
+                                    count: series.totalChapters,
                                   });
                                 }}
-                                className="text-[#9ca3af] hover:text-[#ffffff] p-0.5 transition-colors cursor-pointer btn-press"
-                                title="Ubah Nama Seri"
+                                className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-[6px] border border-[#2e3036] hover:border-[#ef4444]/60 hover:bg-[#ef4444]/10 text-[#9ca3af] hover:text-[#ef4444] transition-all cursor-pointer btn-press"
+                                title="Hapus Seluruh Seri"
                               >
-                                <Pencil className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                            <div className="font-mono text-[11px] text-[#9ca3af] mt-0.5">
-                              {series.totalRenderedPages}/{series.totalPages} hal selesai
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-[#2e3036]">
-                            <button
-                              onClick={() => setSelectedSeries(series)}
-                              className="flex-1 min-h-[36px] py-1.5 px-2 rounded-[6px] bg-[#ff6740] hover:bg-[#ff7e59] text-white text-xs font-semibold text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 btn-press shadow-sm hover:shadow-md hover:shadow-[#ff6740]/20"
-                            >
-                              <BookOpen className="w-3.5 h-3.5" />
-                              <span>Buka Bab ({series.totalChapters})</span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteTarget({
-                                  type: "series",
-                                  title: series.title,
-                                  count: series.totalChapters,
-                                });
-                              }}
-                              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-[6px] border border-[#2e3036] hover:border-[#ef4444]/60 hover:bg-[#ef4444]/10 text-[#9ca3af] hover:text-[#ef4444] transition-all cursor-pointer btn-press"
-                              title="Hapus Seluruh Seri"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                            </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-8 text-center rounded-[6px] border border-[#2e3036] bg-[#202125] text-[#9ca3af] text-xs">
-                    {searchQuery ? `Tidak ada seri manga yang cocok dengan kata kunci "${searchQuery}".` : "Belum ada manga yang tersimpan."}
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-12 text-center rounded-[8px] border border-[#2e3036] bg-[#202125] text-[#9ca3af] flex flex-col items-center justify-center gap-3">
+                      <BookOpen className="w-10 h-10 opacity-30 text-[#9ca3af]" />
+                      <div className="text-sm font-semibold text-white">Belum ada seri manga di koleksi Anda</div>
+                      <p className="text-xs text-[#9ca3af] max-w-sm">
+                        Manga yang Anda baca di tab Jelajah atau terjemahkan di tab Penerjemah akan otomatis tersimpan di sini.
+                      </p>
+                      <button
+                        onClick={() => setActiveNavTab("jelajah")}
+                        className="mt-2 px-4 py-2 rounded-[6px] bg-[#ff6740] hover:bg-[#ff7e59] text-white text-xs font-semibold cursor-pointer btn-press shadow-md"
+                      >
+                        Mulai Jelajahi Manga Populer
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </main>
           )}
 
@@ -5041,11 +5192,11 @@ export default function MangaIDApp() {
           <button
             onClick={() => {
               setView("home");
-              setInputMode("explorer");
+              setActiveNavTab("jelajah");
               if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             className={`flex flex-col items-center gap-1 py-1 px-3 rounded-[6px] transition-colors cursor-pointer ${
-              inputMode === "explorer" && view === "home" ? "text-[#ff6740]" : "text-[#9ca3af] hover:text-[#ffffff]"
+              activeNavTab === "jelajah" && view === "home" ? "text-[#ff6740]" : "text-[#9ca3af] hover:text-[#ffffff]"
             }`}
           >
             <Compass className="w-5 h-5" strokeWidth={1.5} />
@@ -5055,11 +5206,11 @@ export default function MangaIDApp() {
           <button
             onClick={() => {
               setView("home");
-              setInputMode("url");
+              setActiveNavTab("penerjemah");
               if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             className={`flex flex-col items-center gap-1 py-1 px-3 rounded-[6px] transition-colors cursor-pointer ${
-              inputMode !== "explorer" && view === "home" ? "text-[#ff6740]" : "text-[#9ca3af] hover:text-[#ffffff]"
+              activeNavTab === "penerjemah" && view === "home" ? "text-[#ff6740]" : "text-[#9ca3af] hover:text-[#ffffff]"
             }`}
           >
             <Languages className="w-5 h-5" strokeWidth={1.5} />
@@ -5069,10 +5220,12 @@ export default function MangaIDApp() {
           <button
             onClick={() => {
               setView("home");
-              const el = document.getElementById("bab-tersimpan-section");
-              if (el) el.scrollIntoView({ behavior: "smooth" });
+              setActiveNavTab("koleksi");
+              if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="flex flex-col items-center gap-1 py-1 px-3 rounded-[6px] text-[#9ca3af] hover:text-[#ffffff] transition-colors cursor-pointer relative"
+            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-[6px] transition-colors cursor-pointer relative ${
+              activeNavTab === "koleksi" && view === "home" ? "text-[#ff6740]" : "text-[#9ca3af] hover:text-[#ffffff]"
+            }`}
           >
             <div className="relative">
               <BookOpen className="w-5 h-5" strokeWidth={1.5} />
