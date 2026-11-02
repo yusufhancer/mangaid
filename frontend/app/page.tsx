@@ -55,9 +55,15 @@ const BACKEND_URL = "";
 
 const resolveProxyImage = (url: string | null | undefined): string => {
   if (!url) return "";
-  if (url.startsWith("/api/") || url.startsWith("data:")) return url;
+  if (url.startsWith("data:")) return url;
+  if (url.startsWith("/api/proxy/image?")) {
+    if (!url.includes("v=2")) {
+      return url.replace("/api/proxy/image?", "/api/proxy/image?v=2&");
+    }
+    return url;
+  }
   if (url.includes("mangadex.org") || url.includes("mangadex.network")) {
-    return `/api/proxy/image?url=${encodeURIComponent(url)}`;
+    return `/api/proxy/image?v=2&url=${encodeURIComponent(url)}`;
   }
   return url;
 };

@@ -23,7 +23,11 @@ ALLOWED_REFERER_MAP = {
 }
 
 @router.get("/proxy/image")
-async def proxy_image(url: str = Query(..., description="Target image URL to proxy")):
+@router.head("/proxy/image")
+async def proxy_image(
+    url: str = Query(..., description="Target image URL to proxy"),
+    v: Optional[str] = Query(None, description="Cache buster version")
+):
     url = url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="URL cannot be empty")
@@ -66,12 +70,14 @@ async def proxy_image(url: str = Query(..., description="Target image URL to pro
                 logger.warning("Proxy received HTML challenge instead of image for %s", url)
                 raise HTTPException(status_code=502, detail="Upstream returned HTML challenge instead of image")
 
+            cache_header = "public, max-age=604800, immutable" if content_type.startswith("image/") else "no-cache, no-store"
+
             return Response(
                 content=resp.content,
                 status_code=200,
                 media_type=content_type,
                 headers={
-                    "Cache-Control": "public, max-age=604800, immutable",
+                    "Cache-Control": cache_header,
                     "Cross-Origin-Resource-Policy": "cross-origin",
                 }
             )

@@ -462,7 +462,7 @@ async def _search_mangadex(q: str, limit: int, genres: Optional[str] = None) -> 
                 file_name = rel.get("attributes", {}).get("fileName")
                 if file_name:
                     raw_cover = f"https://uploads.mangadex.org/covers/{m_id}/{file_name}.256.jpg"
-                    cover_url = f"/api/proxy/image?url={quote(raw_cover, safe='')}"
+                    cover_url = f"/api/proxy/image?v=2&url={quote(raw_cover, safe='')}"
                 break
 
         results.append(ExplorerMangaItem(
@@ -571,7 +571,7 @@ async def _search_raw_manga(q: str, limit: int, genres: Optional[str] = None) ->
                 file_name = rel.get("attributes", {}).get("fileName")
                 if file_name:
                     raw_cover = f"https://uploads.mangadex.org/covers/{m_id}/{file_name}.256.jpg"
-                    cover_url = f"/api/proxy/image?url={quote(raw_cover, safe='')}"
+                    cover_url = f"/api/proxy/image?v=2&url={quote(raw_cover, safe='')}"
                 break
 
         results.append(ExplorerMangaItem(
@@ -669,7 +669,7 @@ async def _search_komikindo(q: str, limit: int, genres: Optional[str] = None) ->
                             fn = rel.get("attributes", {}).get("fileName")
                             if fn:
                                 raw_cover = f"https://uploads.mangadex.org/covers/{m_id}/{fn}.256.jpg"
-                                cover_url = f"/api/proxy/image?url={quote(raw_cover, safe='')}"
+                                cover_url = f"/api/proxy/image?v=2&url={quote(raw_cover, safe='')}"
                             break
 
                     results.append(ExplorerMangaItem(
@@ -1050,7 +1050,7 @@ async def get_manga_details(manga_id: str):
                         if rel.get("type") == "cover_art":
                             cover_file = rel.get("attributes", {}).get("fileName")
                             break
-                    cover_url = f"/api/proxy/image?url=https://uploads.mangadex.org/covers/{manga_id}/{cover_file}.256.jpg" if cover_file else None
+                    cover_url = f"/api/proxy/image?v=2&url=https://uploads.mangadex.org/covers/{manga_id}/{cover_file}.256.jpg" if cover_file else None
                     return ExplorerMangaItem(
                         id=manga_id,
                         title=title,
