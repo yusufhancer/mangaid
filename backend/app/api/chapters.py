@@ -75,7 +75,7 @@ def sync_chapters(payload: SyncChaptersRequest, request: Request, db: Session = 
             )
             db.add(new_chapter)
 
-            if ch_item.pages:
+            if ch_item.pages and len(ch_item.pages) > 0:
                 for idx, p_url in enumerate(ch_item.pages, start=1):
                     rec = PageRecord(
                         id=str(uuid.uuid4()),
@@ -86,7 +86,31 @@ def sync_chapters(payload: SyncChaptersRequest, request: Request, db: Session = 
                         status="rendered"
                     )
                     db.add(rec)
+            else:
+                total_p = max(1, ch_item.total_pages or 1)
+                for idx in range(1, total_p + 1):
+                    rec = PageRecord(
+                        id=str(uuid.uuid4()),
+                        chapter_id=ch_item.id,
+                        page_number=idx,
+                        original_path="",
+                        translated_path="",
+                        status="rendered"
+                    )
+                    db.add(rec)
             restored += 1
+        else:
+            if len(existing.pages) == 0 and ch_item.pages and len(ch_item.pages) > 0:
+                for idx, p_url in enumerate(ch_item.pages, start=1):
+                    rec = PageRecord(
+                        id=str(uuid.uuid4()),
+                        chapter_id=ch_item.id,
+                        page_number=idx,
+                        original_path=p_url,
+                        translated_path=p_url,
+                        status="rendered"
+                    )
+                    db.add(rec)
     db.commit()
     return {"status": "ok", "restored": restored}
 
@@ -146,7 +170,12 @@ def list_chapters(request: Request, db: Session = Depends(get_db)):
     if device_id == "default":
         query = query.filter((Chapter.device_id == "default") | (Chapter.device_id.is_(None)))
     else:
-        query = query.filter(Chapter.device_id == device_id)
+        # Include this device's chapters plus default/unassigned ones to prevent data loss across updates
+        query = query.filter(
+            (Chapter.device_id == device_id) |
+            (Chapter.device_id == "default") |
+            (Chapter.device_id.is_(None))
+        )
     chapters = query.order_by(Chapter.created_at.desc()).all()
     res = []
     for c in chapters:
@@ -160,15 +189,17 @@ def list_chapters(request: Request, db: Session = Depends(get_db)):
                 (p.translated_path and os.path.exists(p.translated_path))
                 or (p.original_path and p.original_path.startswith("http"))
                 or (p.translated_path and p.translated_path.startswith("http"))
+                or (not p.original_path and not p.translated_path) # placeholder for restored chapters
             )
         )
+        total_p = len(pages_map)
         res.append(ChapterSummaryResponse(
             id=c.id,
             title=c.title,
             chapter_number=c.chapter_number,
             language_source=c.language_source,
-            total_pages=len(pages_map),
-            rendered_pages=rendered,
+            total_pages=total_p if total_p > 0 else 1,
+            rendered_pages=rendered if total_p > 0 else 1,
             created_at=c.created_at.isoformat() if c.created_at else None
         ))
     return res

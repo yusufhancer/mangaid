@@ -4,15 +4,14 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.4.5",
+    "version": "1.4.6",
     "release_date": "2 November 2026",
-    "title": "MangaID Strict Genre Enforcement & Active Tag Synchronization",
+    "title": "MangaID Mobile Reader Polish, Robust Audio & Permanent Dual-Sync",
     "changelog": [
-        "Filter Genre Akurat 100% (Strict Genre Enforcement): Memperbaiki bug di mana manga yang tidak berhubungan muncul. Setiap hasil pencarian diverifikasi wajib memiliki genre yang dicari",
-        "Pencarian Spesifik Tema (Murim, Cultivation, Necromancer, Leveling, Dungeon, Yuri, Yaoi): Menggunakan pencarian presisi tinggi dan mengecualikan hasil palsu",
-        "Sinkronisasi Tag & Penonjolan Visual: Genre yang dicari dijamin selalu tercantum di daftar genre kartu komik dan halaman detail bab dengan badge merah mencolok",
-        "Filter Multi-Genre Berlapis: Mendukung pencarian banyak genre sekaligus dengan jaminan setiap komik memenuhi semua genre yang dipilih",
-        "Database 780+ Genre & Tag Asli serta PWA MangaID Resmi"
+        "Header Pembaca HP Bersih & Ergonomis: Menu Opsi (Bottom Sheet) praktis di HP dengan tombol besar ramah jempol sehingga layar baca tidak penuh sesak",
+        "Pergantian Mode Baca Responsif (Slide <-> Webtoon): Beralih instan antara Mode Slide dan Mode Webtoon dengan sinkronisasi halaman aktif otomatis",
+        "Audiobook Pintar per Slide: Pada mode slide, audio AI otomatis memutar narasi slide yang sedang dibuka (tidak mengulang dari awal) dan dilengkapi fallback Web Speech",
+        "Penyimpanan Database Permanen (Anti-Reset): Koleksi seri manga dan riwayat baca tersimpan permanen secara ganda (Dual-Sync SQLite + LocalStorage), dijamin tidak pernah hilang saat update aplikasi"
     ]
 }
 

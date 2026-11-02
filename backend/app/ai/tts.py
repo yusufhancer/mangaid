@@ -279,11 +279,8 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
 import time
 
 TTS_MODELS = [
-    "gemini-2.5-flash-preview-tts",
-    "gemini-3.1-flash-tts-preview",
-    "gemini-3.8-flash-tts",
-    "gemini-3.8-flash-lite-tts",
-    "gemini-2.5-pro-preview-tts",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-exp",
 ]
 
 def get_gemini_api_keys() -> List[str]:
@@ -292,7 +289,7 @@ def get_gemini_api_keys() -> List[str]:
 
 def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
     """Synchronous Google GenAI Gemini TTS call speaking ONLY the pure dialogue.
-    Automatically rotates through all configured GEMINI_API_KEYs and all TTS_MODELS."""
+    Automatically rotates through all configured GEMINI_API_KEYs and models."""
     keys = get_gemini_api_keys()
     if not keys:
         return None
@@ -300,14 +297,15 @@ def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
     if not clean_text or not any(c.isalnum() for c in clean_text):
         return None
 
-    for api_key in keys:
+    # Limit key tries to first 2 keys and 1 model to avoid long timeouts
+    for api_key in keys[:2]:
         try:
             client = genai.Client(api_key=api_key)
         except Exception as err:
             logger.error("Failed to initialize GenAI client: %s", err)
             continue
 
-        for model_name in TTS_MODELS:
+        for model_name in TTS_MODELS[:1]:
             try:
                 resp = client.models.generate_content(
                     model=model_name,
@@ -328,51 +326,40 @@ def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
                         if part.inline_data and part.inline_data.data:
                             return part.inline_data.data
             except Exception as e:
-                err_msg = str(e)
-                if "PerMinute" in err_msg or "retry in" in err_msg:
-                    # Temporary burst limit: wait 3.5s and retry once
-                    logger.info("RPM burst limit on model %s, pausing 3.5s...", model_name)
-                    time.sleep(3.5)
-                    try:
-                        resp = client.models.generate_content(
-                            model=model_name,
-                            contents=clean_text,
-                            config=types.GenerateContentConfig(
-                                response_modalities=["AUDIO"],
-                                speech_config=types.SpeechConfig(
-                                    voice_config=types.VoiceConfig(
-                                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                            voice_name=voice_name
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                        if resp.candidates and resp.candidates[0].content.parts:
-                            for part in resp.candidates[0].content.parts:
-                                if part.inline_data and part.inline_data.data:
-                                    return part.inline_data.data
-                    except Exception as retry_err:
-                        logger.warning("Retry on model %s failed: %s", model_name, retry_err)
-
-                logger.warning("Gemini TTS model %s failed for key ...%s (%s): %s", model_name, api_key[-4:] if len(api_key) > 4 else "", voice_name, e)
-                # Try NEXT model in TTS_MODELS!
+                logger.debug("Gemini TTS %s failed: %s", model_name, e)
                 continue
 
     return None
 
-async def _call_edge_tts(text: str, voice_name: str, rate: str, pitch: str, volume: str) -> Optional[bytes]:
-    """Fallback Edge-TTS neural synthesizer."""
+async def _call_edge_tts(text: str, voice_name: str, rate: str = "+0%", pitch: str = "+0Hz", volume: str = "+0%") -> Optional[bytes]:
+    """Fallback Edge-TTS neural synthesizer. Fast, high-fidelity Indonesian neural voice."""
+    clean_text = text.strip()
+    if not clean_text:
+        return None
     try:
-        comm = edge_tts.Communicate(text=text, voice=voice_name, rate=rate, pitch=pitch, volume=volume)
+        comm = edge_tts.Communicate(text=clean_text, voice=voice_name, rate=rate, pitch=pitch, volume=volume)
         chunks = []
         async for chunk in comm.stream():
             if chunk["type"] == "audio":
                 chunks.append(chunk["data"])
-        return b"".join(chunks)
+        if chunks:
+            return b"".join(chunks)
     except Exception as e:
-        logger.error("Edge-TTS error (%s): %s", voice_name, e)
-        return None
+        logger.warning("Edge-TTS with params error (%s): %s", voice_name, e)
+
+    # Retry without rate/pitch customizations
+    try:
+        comm = edge_tts.Communicate(text=clean_text, voice=voice_name)
+        chunks = []
+        async for chunk in comm.stream():
+            if chunk["type"] == "audio":
+                chunks.append(chunk["data"])
+        if chunks:
+            return b"".join(chunks)
+    except Exception as e2:
+        logger.error("Edge-TTS default error (%s): %s", voice_name, e2)
+
+    return None
 
 def stitch_wav_buffers(wav_bytes_list: List[bytes], sample_rate: int = 24000) -> Optional[bytes]:
     """
@@ -436,6 +423,18 @@ async def get_or_generate_page_audio(
 
     dialogues = get_page_dialogues(chapter_id, page_number, db)
     if not dialogues:
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+        ch_title = (chapter.title if chapter and chapter.title else "Komik").strip()
+        ch_num = chapter.chapter_number if chapter and chapter.chapter_number else "1"
+        announcement = f"Halaman {page_number}. Bab {ch_num}. Tidak ada dialog pada halaman ini."
+        edge_voice = "id-ID-GadisNeural" if voice_key == "gadis" else "id-ID-ArdiNeural"
+        chunk = await _call_edge_tts(announcement, edge_voice)
+        if chunk and len(chunk) > 200:
+            with open(mp3_path, "wb") as f_out:
+                f_out.write(chunk)
+            if mp3_path.exists():
+                return mp3_path
         return None
 
     audio_dir.mkdir(parents=True, exist_ok=True)

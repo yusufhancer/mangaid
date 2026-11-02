@@ -40,6 +40,7 @@ import {
   Bell,
   Filter,
   Tag,
+  SlidersHorizontal,
 } from "lucide-react";
 
 interface AppVersionInfo {
@@ -1394,6 +1395,7 @@ export default function MangaIDApp() {
   const [readerMode, setReaderMode] = useState<"vertical" | "single">("vertical");
   const [singlePageIdx, setSinglePageIdx] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showMobileReaderMenu, setShowMobileReaderMenu] = useState(false);
 
   // AI Voice Narration (Audiobook) states
   const [showAudioPlayer, setShowAudioPlayer] = useState(false);
@@ -1958,12 +1960,14 @@ export default function MangaIDApp() {
   // Load saved chapters from backend + persistent localStorage cache
   const loadSavedChapters = async () => {
     // 1. Instantly load from localStorage so user never sees an empty screen
+    let localChapters: SavedChapter[] = [];
     if (typeof window !== "undefined") {
       try {
         const cached = localStorage.getItem("mangaid_user_history");
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
+            localChapters = parsed;
             setSavedChapters(parsed);
           }
         }
@@ -1976,28 +1980,62 @@ export default function MangaIDApp() {
       const resp = await apiFetch(`${BACKEND_URL}/api/chapters`);
       if (resp.ok) {
         const backendChapters: SavedChapter[] = await resp.json();
-        if (backendChapters && backendChapters.length > 0) {
-          setSavedChapters(backendChapters);
+        if (Array.isArray(backendChapters) && backendChapters.length > 0) {
+          // Merge backend chapters with any local chapters not yet in backend
+          const backendIds = new Set(backendChapters.map((c) => c.id));
+          const missingFromBackend = localChapters.filter((c) => !backendIds.has(c.id));
+          const merged = [...backendChapters, ...missingFromBackend];
+          setSavedChapters(merged);
           if (typeof window !== "undefined") {
-            localStorage.setItem("mangaid_user_history", JSON.stringify(backendChapters));
+            localStorage.setItem("mangaid_user_history", JSON.stringify(merged));
           }
-        } else {
-          // Backend database is empty (e.g. freshly rebuilt container on Hugging Face)
-          // But localStorage has the user's chapters!
-          if (typeof window !== "undefined") {
-            const cached = localStorage.getItem("mangaid_user_history");
-            if (cached) {
-              const localChapters: SavedChapter[] = JSON.parse(cached);
-              if (localChapters.length > 0) {
-                // Auto-sync back to the backend SQLite database so backend has them too!
-                apiFetch(`${BACKEND_URL}/api/chapters/sync`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ chapters: localChapters }),
-                }).catch((e) => console.warn("Auto-restore history error:", e));
+
+          if (missingFromBackend.length > 0) {
+            const syncPayload = missingFromBackend.map((c) => {
+              let pages: string[] | undefined = undefined;
+              if (typeof window !== "undefined") {
+                try {
+                  const det = localStorage.getItem(`mangaid_detail_${c.id}`);
+                  if (det) {
+                    const parsedDet = JSON.parse(det);
+                    if (parsedDet && Array.isArray(parsedDet.pages)) {
+                      pages = parsedDet.pages.map((p: any) => p.original_url || p.image_url || p.translated_url);
+                    }
+                  }
+                } catch {}
               }
-            }
+              return { ...c, pages };
+            });
+            apiFetch(`${BACKEND_URL}/api/chapters/sync`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chapters: syncPayload }),
+            }).catch((e) => console.warn("Auto-sync missing chapters error:", e));
           }
+        } else if (localChapters.length > 0) {
+          // Backend database is fresh/empty after container update/rebuild!
+          // NEVER wipe user's local collection! Keep local chapters and sync to backend.
+          setSavedChapters(localChapters);
+          const syncPayload = localChapters.map((c) => {
+            let pages: string[] | undefined = undefined;
+            if (typeof window !== "undefined") {
+              try {
+                const det = localStorage.getItem(`mangaid_detail_${c.id}`);
+                if (det) {
+                  const parsedDet = JSON.parse(det);
+                  if (parsedDet && Array.isArray(parsedDet.pages)) {
+                    pages = parsedDet.pages.map((p: any) => p.original_url || p.image_url || p.translated_url);
+                  }
+                }
+              } catch {}
+            }
+            return { ...c, pages };
+          });
+          apiFetch(`${BACKEND_URL}/api/chapters/sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chapters: syncPayload }),
+          }).catch((e) => console.warn("Auto-restore history error:", e));
         }
       }
     } catch (err) {
@@ -2176,6 +2214,32 @@ export default function MangaIDApp() {
     setReaderMode(mode);
     if (typeof window !== "undefined") {
       localStorage.setItem("mangaid_reader_mode", mode);
+      if (mode === "vertical") {
+        setTimeout(() => {
+          const targetEl = document.getElementById(`webtoon-page-${singlePageIdx + 1}`);
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+          } else {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+        }, 50);
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  };
+
+  const goToSlidePage = (newIdx: number) => {
+    if (!chapterData) return;
+    const clamped = Math.max(0, Math.min(newIdx, chapterData.pages.length - 1));
+    setSinglePageIdx(clamped);
+    const targetP = clamped + 1;
+    setCurrentAudioPage(targetP);
+    if (showAudioPlayer && audioPlaying) {
+      playPageAudio(targetP, audioVoice, audioSpeed);
+    }
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -2222,20 +2286,21 @@ export default function MangaIDApp() {
         const total = chapterData.pages.length;
         if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === " " || e.key === "PageDown") {
           e.preventDefault();
-          setSinglePageIdx((curr) => {
-            if (curr < total - 1) return curr + 1;
-            return curr;
-          });
+          if (singlePageIdx < total - 1) {
+            goToSlidePage(singlePageIdx + 1);
+          }
         } else if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp") {
           e.preventDefault();
-          setSinglePageIdx((curr) => (curr > 0 ? curr - 1 : 0));
+          if (singlePageIdx > 0) {
+            goToSlidePage(singlePageIdx - 1);
+          }
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [view, chapterData, readerMode]);
+  }, [view, chapterData, readerMode, singlePageIdx, showAudioPlayer, audioPlaying]);
 
   // AI Voice Narration (Audiobook) Controls
   useEffect(() => {
@@ -2243,6 +2308,9 @@ export default function MangaIDApp() {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
       }
     };
   }, []);
@@ -2301,8 +2369,7 @@ export default function MangaIDApp() {
         if (pageNum < chapterData.pages.length) {
           const nextPage = pageNum + 1;
           if (readerMode === "single") {
-            setSinglePageIdx(nextPage - 1);
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            goToSlidePage(nextPage - 1);
           } else {
             const el = document.getElementById(`webtoon-page-${nextPage}`);
             if (el) el.scrollIntoView({ behavior: "smooth" });
@@ -2314,6 +2381,34 @@ export default function MangaIDApp() {
       };
 
       audio.onerror = () => {
+        // Fallback to Web Speech API so narration never breaks!
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          try {
+            window.speechSynthesis.cancel();
+            const fallbackText = `Halaman ${pageNum}. Bab ${chapterData.chapter_number || "1"}. ${chapterData.title || ""}.`;
+            const utter = new SpeechSynthesisUtterance(fallbackText);
+            utter.lang = "id-ID";
+            utter.rate = speed;
+            utter.onend = () => {
+              if (pageNum < chapterData.pages.length) {
+                const nextPage = pageNum + 1;
+                if (readerMode === "single") goToSlidePage(nextPage - 1);
+                else {
+                  const el = document.getElementById(`webtoon-page-${nextPage}`);
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }
+                playPageAudio(nextPage, voice, speed);
+              } else {
+                setAudioPlaying(false);
+              }
+            };
+            window.speechSynthesis.speak(utter);
+            setAudioLoading(false);
+            setAudioPlaying(true);
+            setAudioError(null);
+            return;
+          } catch {}
+        }
         setAudioLoading(false);
         setAudioPlaying(false);
         setAudioError("Halaman ini belum memiliki teks dialog.");
@@ -2342,6 +2437,9 @@ export default function MangaIDApp() {
       if (audioRef.current) {
         audioRef.current.pause();
       }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
       setAudioPlaying(false);
       setShowAudioPlayer(false);
     } else {
@@ -2352,22 +2450,28 @@ export default function MangaIDApp() {
   };
 
   const togglePlayPause = () => {
-    if (!audioRef.current) {
-      playPageAudio(currentAudioPage, audioVoice, audioSpeed);
+    const activePage = readerMode === "single" ? singlePageIdx + 1 : currentAudioPage;
+    if (!audioRef.current || currentAudioPage !== activePage) {
+      playPageAudio(activePage, audioVoice, audioSpeed);
       return;
     }
     if (audioPlaying) {
       audioRef.current.pause();
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.pause();
+      }
       setAudioPlaying(false);
     } else {
-      audioRef.current.play().then(() => setAudioPlaying(true)).catch(() => {});
+      audioRef.current.play().then(() => setAudioPlaying(true)).catch(() => {
+        playPageAudio(activePage, audioVoice, audioSpeed);
+      });
     }
   };
 
   const handleNextAudioPage = () => {
     if (!chapterData || currentAudioPage >= chapterData.pages.length) return;
     const nextP = currentAudioPage + 1;
-    if (readerMode === "single") setSinglePageIdx(nextP - 1);
+    if (readerMode === "single") goToSlidePage(nextP - 1);
     else {
       const el = document.getElementById(`webtoon-page-${nextP}`);
       if (el) el.scrollIntoView({ behavior: "smooth" });
@@ -2378,7 +2482,7 @@ export default function MangaIDApp() {
   const handlePrevAudioPage = () => {
     if (currentAudioPage <= 1) return;
     const prevP = currentAudioPage - 1;
-    if (readerMode === "single") setSinglePageIdx(prevP - 1);
+    if (readerMode === "single") goToSlidePage(prevP - 1);
     else {
       const el = document.getElementById(`webtoon-page-${prevP}`);
       if (el) el.scrollIntoView({ behavior: "smooth" });
@@ -4214,8 +4318,45 @@ export default function MangaIDApp() {
                 </div>
               </div>
 
-              {/* Right: Mode Switcher, Fullscreen, Language, PDF, Delete */}
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+              {/* Mobile Right Controls: Compact, Clean & Thumb-Friendly */}
+              <div className="flex sm:hidden items-center gap-1.5 flex-shrink-0">
+                {/* Segmented Flat Toggle: Terjemahan vs Asli */}
+                <div className="flex items-center bg-[#151516] p-0.5 rounded-[6px] border border-[#2A2A2C]">
+                  <button
+                    onClick={() => setShowTranslated(true)}
+                    className={`min-h-[28px] px-2 py-0.5 rounded-[4px] text-[11px] font-medium transition-colors cursor-pointer ${
+                      showTranslated
+                        ? "bg-[#E8452C] text-white font-semibold shadow-sm"
+                        : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                    }`}
+                  >
+                    ID
+                  </button>
+                  <button
+                    onClick={() => setShowTranslated(false)}
+                    className={`min-h-[28px] px-2 py-0.5 rounded-[4px] text-[11px] font-medium transition-colors cursor-pointer ${
+                      !showTranslated
+                        ? "bg-[#E8452C] text-white font-semibold shadow-sm"
+                        : "text-[#8E8B84] hover:text-[#ECE9E2]"
+                    }`}
+                  >
+                    Asli
+                  </button>
+                </div>
+
+                {/* Mobile Menu Button - Opens Sleek Bottom Sheet */}
+                <button
+                  onClick={() => setShowMobileReaderMenu(true)}
+                  className="flex items-center gap-1 min-h-[30px] px-2.5 py-1 rounded-[6px] border border-[#2A2A2C] bg-[#161617] hover:bg-[#202022] text-[#ECE9E2] text-xs font-semibold cursor-pointer btn-press shadow-sm"
+                  title="Buka Pengaturan Pembaca (Mode Baca, Audiobook, PDF, dll)"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-[#E8452C]" />
+                  <span>Menu</span>
+                </button>
+              </div>
+
+              {/* Desktop Right Toolbar: Spacious & Comfortable */}
+              <div className="hidden sm:flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
                 {/* AI Voice Narration (Audiobook) Button */}
                 <button
                   onClick={toggleAudioPlayer}
@@ -4330,6 +4471,173 @@ export default function MangaIDApp() {
             </div>
           </header>
 
+          {/* MOBILE READER QUICK SETTINGS / BOTTOM SHEET MODAL */}
+          {showMobileReaderMenu && (
+            <div
+              className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-sm sm:hidden animate-fade-in select-none"
+              onClick={() => setShowMobileReaderMenu(false)}
+            >
+              <div
+                className="bg-[#151516] border-t border-[#2A2A2C] rounded-t-2xl p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto animate-slide-up"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between border-b border-[#2A2A2C] pb-3">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-[#E8452C]" />
+                    <h3 className="font-display font-bold text-sm text-[#ECE9E2]">
+                      Menu & Pengaturan Pembaca
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setShowMobileReaderMenu(false)}
+                    className="p-1 rounded-full text-[#8E8B84] hover:text-[#ECE9E2] hover:bg-[#2A2A2C] cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Pilihan Mode Baca */}
+                <div>
+                  <label className="text-[11px] font-mono text-[#8E8B84] uppercase tracking-wider block mb-2 font-semibold">
+                    Mode Membaca
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      onClick={() => {
+                        handleSetReaderMode("vertical");
+                        setShowMobileReaderMenu(false);
+                      }}
+                      className={`flex flex-col items-center justify-center p-3.5 rounded-[8px] border text-xs font-semibold gap-1.5 transition-all cursor-pointer ${
+                        readerMode === "vertical"
+                          ? "bg-[#E8452C]/15 border-[#E8452C] text-[#E8452C] shadow-md shadow-[#E8452C]/10"
+                          : "bg-[#1C1C1E] border-[#2A2A2C] text-[#ECE9E2] hover:border-[#8E8B84]/40"
+                      }`}
+                    >
+                      <Rows className="w-5 h-5" />
+                      <span>Mode Webtoon</span>
+                      <span className="text-[10px] text-[#8E8B84] font-normal">Gulir Vertikal Panjang</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        handleSetReaderMode("single");
+                        setShowMobileReaderMenu(false);
+                      }}
+                      className={`flex flex-col items-center justify-center p-3.5 rounded-[8px] border text-xs font-semibold gap-1.5 transition-all cursor-pointer ${
+                        readerMode === "single"
+                          ? "bg-[#E8452C]/15 border-[#E8452C] text-[#E8452C] shadow-md shadow-[#E8452C]/10"
+                          : "bg-[#1C1C1E] border-[#2A2A2C] text-[#ECE9E2] hover:border-[#8E8B84]/40"
+                      }`}
+                    >
+                      <Columns className="w-5 h-5" />
+                      <span>Mode Slide</span>
+                      <span className="text-[10px] text-[#8E8B84] font-normal">Satu Per Satu (Ketuk)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Audiobook Narasi AI */}
+                <div>
+                  <label className="text-[11px] font-mono text-[#8E8B84] uppercase tracking-wider block mb-2 font-semibold">
+                    Suara Narator AI
+                  </label>
+                  <button
+                    onClick={() => {
+                      toggleAudioPlayer();
+                      setShowMobileReaderMenu(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-[8px] border text-xs font-medium transition-all cursor-pointer ${
+                      showAudioPlayer
+                        ? "bg-[#E8452C] border-[#E8452C] text-white shadow-md shadow-[#E8452C]/20"
+                        : "bg-[#1C1C1E] border-[#2A2A2C] text-[#ECE9E2] hover:border-[#8E8B84]/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-full bg-black/20 text-[#ECE9E2]">
+                        <Headphones className="w-4 h-4 text-[#E8452C]" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-semibold text-xs text-[#ECE9E2]">
+                          {showAudioPlayer ? "Tutup Pemutar Audiobook" : "Buka Pemutar Audiobook AI"}
+                        </div>
+                        <div className="text-[10px] text-[#8E8B84]">
+                          {readerMode === "single"
+                            ? `Memutar narasi untuk Slide ${singlePageIdx + 1}`
+                            : "Mendengarkan narasi suara drama anime"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="px-2.5 py-1 rounded text-[10px] font-mono font-bold bg-[#0D0D0E] text-[#ECE9E2] border border-[#2A2A2C]">
+                      {showAudioPlayer ? "AKTIF" : "OFF"}
+                    </div>
+                  </button>
+                </div>
+
+                {/* Fitur & Alat Pendukung */}
+                <div>
+                  <label className="text-[11px] font-mono text-[#8E8B84] uppercase tracking-wider block mb-2 font-semibold">
+                    Alat & Aksi
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      onClick={() => {
+                        toggleFullscreen();
+                        setShowMobileReaderMenu(false);
+                      }}
+                      className="flex items-center gap-2 p-3 rounded-[6px] bg-[#1C1C1E] border border-[#2A2A2C] text-xs font-medium text-[#ECE9E2] hover:border-[#8E8B84]/40 cursor-pointer"
+                    >
+                      {isFullscreen ? <Minimize className="w-4 h-4 text-[#8E8B84]" /> : <Maximize className="w-4 h-4 text-[#8E8B84]" />}
+                      <span>{isFullscreen ? "Layar Normal" : "Layar Penuh"}</span>
+                    </button>
+
+                    <a
+                      href={`${BACKEND_URL}/api/chapters/${chapterData.id}/pdf`}
+                      download
+                      onClick={() => setShowMobileReaderMenu(false)}
+                      className="flex items-center gap-2 p-3 rounded-[6px] bg-[#1C1C1E] border border-[#2A2A2C] text-xs font-medium text-[#ECE9E2] hover:border-[#8E8B84]/40 cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 text-[#8E8B84]" />
+                      <span>Unduh PDF</span>
+                    </a>
+
+                    <button
+                      onClick={() => {
+                        setShowMobileReaderMenu(false);
+                        handleOpenRename({
+                          type: "chapter",
+                          id: chapterData.id,
+                          currentTitle: chapterData.title || "",
+                          currentChapterNumber: chapterData.chapter_number || "1",
+                        });
+                      }}
+                      className="flex items-center gap-2 p-3 rounded-[6px] bg-[#1C1C1E] border border-[#2A2A2C] text-xs font-medium text-[#ECE9E2] hover:border-[#8E8B84]/40 cursor-pointer"
+                    >
+                      <Pencil className="w-4 h-4 text-[#8E8B84]" />
+                      <span>Ubah Nama Bab</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowMobileReaderMenu(false);
+                        setDeleteTarget({
+                          type: "chapter",
+                          id: chapterData.id,
+                          title: chapterData.title || `Bab ${chapterData.chapter_number || "1"}`,
+                          redirectHome: true,
+                        });
+                      }}
+                      className="flex items-center gap-2 p-3 rounded-[6px] bg-[#1C1C1E] border border-[#D4493E]/40 text-xs font-medium text-[#D4493E] hover:bg-[#D4493E]/10 cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4 text-[#D4493E]" />
+                      <span>Hapus Bab</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* READER BODY: SINGLE PAGE MODE VS WEBTOON MODE */}
           {readerMode === "single" ? (
             <div className="flex-1 bg-[#0D0D0E] flex flex-col items-center justify-start select-none relative min-h-[calc(100vh-55px)] pb-24">
@@ -4362,8 +4670,7 @@ export default function MangaIDApp() {
                         <div
                           onClick={() => {
                             if (safeSingleIdx > 0) {
-                              setSinglePageIdx(safeSingleIdx - 1);
-                              window.scrollTo({ top: 0, behavior: "smooth" });
+                              goToSlidePage(safeSingleIdx - 1);
                             }
                           }}
                           className={`absolute inset-y-0 left-0 w-1/3 flex items-center justify-start pl-2 sm:pl-4 transition-all ${
@@ -4382,8 +4689,7 @@ export default function MangaIDApp() {
                         <div
                           onClick={() => {
                             if (safeSingleIdx < chapterData.pages.length - 1) {
-                              setSinglePageIdx(safeSingleIdx + 1);
-                              window.scrollTo({ top: 0, behavior: "smooth" });
+                              goToSlidePage(safeSingleIdx + 1);
                             } else if (readerNav.nextChapter) {
                               fetchChapter(readerNav.nextChapter.id);
                             }
@@ -4505,10 +4811,7 @@ export default function MangaIDApp() {
                 <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-[#151516]/95 backdrop-blur-md border border-[#2A2A2C] rounded-full px-4 py-1.5 shadow-2xl flex items-center gap-3 font-mono text-xs text-[#ECE9E2] select-none">
                   <button
                     disabled={singlePageIdx === 0}
-                    onClick={() => {
-                      setSinglePageIdx((curr) => Math.max(0, curr - 1));
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
+                    onClick={() => goToSlidePage(singlePageIdx - 1)}
                     className="p-1 rounded-full hover:bg-[#2A2A2C] text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-25 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     title="Halaman Sebelumnya (←)"
                   >
@@ -4522,10 +4825,7 @@ export default function MangaIDApp() {
 
                   <button
                     disabled={singlePageIdx >= chapterData.pages.length - 1}
-                    onClick={() => {
-                      setSinglePageIdx((curr) => Math.min(chapterData.pages.length - 1, curr + 1));
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
+                    onClick={() => goToSlidePage(singlePageIdx + 1)}
                     className="p-1 rounded-full hover:bg-[#2A2A2C] text-[#8E8B84] hover:text-[#ECE9E2] disabled:opacity-25 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     title="Halaman Berikutnya (→)"
                   >
@@ -4693,7 +4993,7 @@ export default function MangaIDApp() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 font-display font-bold text-[#ECE9E2] truncate">
                     <Headphones className="w-3.5 h-3.5 text-[#E8452C] shrink-0" />
-                    <span>Hal {currentAudioPage}</span>
+                    <span>{readerMode === "single" ? `Slide ${currentAudioPage}` : `Hal ${currentAudioPage}`}</span>
                     <span className="text-[10px] font-mono text-[#8E8B84] font-normal">
                       / {chapterData.pages.length}
                     </span>
