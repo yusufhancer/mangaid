@@ -4,14 +4,14 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.4.8",
+    "version": "1.5.0",
     "release_date": "2 November 2026",
-    "title": "MangaID Instant Open (No Splash) & Bulletproof Engine",
+    "title": "MangaID MangaDex Modern Design System & Clean Catalog Redesign",
     "changelog": [
-        "Membuka Web Langsung Instan: Animasi splash screen intro saat awal masuk telah dihapus secara menyeluruh, antarmuka web sekarang langsung siap digunakan tanpa jeda waktu tunggu",
-        "Integrasi Penuh nhentai v2 API: Browser TLS fingerprint impersonation (curl_cffi chrome124) dan multi-tier fallback (Cubari, Website mirror) bebas 403 Forbidden",
-        "Explorer Detail & Multi-Mirror Stabil: Ekstraksi tag/genre lengkap dan proxy gambar CDN anti-blokir",
-        "Mempertahankan UI Mobile Ergonomis & Database Koleksi Permanen (v1.4.6)"
+        "Desain Visual Bersih ala MangaDex: Menghilangkan pola desain 'AI-slop', digantikan dengan tema gelap slate elegan autentik MangaDex (#191a1c, #202125, #ff6740 accent) dan tipografi modern Inter yang nyaman di mata",
+        "Top Navigation Bar Modern & Luas: Menggantikan sidebar kaku dengan top header bar responsif bergaya MangaDex yang dilengkapi pencarian global cepat dan navigasi instan",
+        "Kartu Manga Rasio 7:10 & Detail Hero Blur: Tampilan poster vertikal proporsional dengan badge status (Ongoing, Completed, 18+), efek gradien halus, dan modal detail komik dengan latar hero cover blur",
+        "Seluruh Fitur & Logika Inti Tetap Utuh: Mesin penerjemah AI, ekstraksi multi-sumber (MangaDex, Komikindo, nhentai v2), audiobook per slide, pembaca slide/webtoon, dan database ganda permanen tetap berjalan 100% sempurna"
     ]
 }
 

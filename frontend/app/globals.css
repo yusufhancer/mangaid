@@ -1,21 +1,33 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Instrument+Sans:wght@400..600&family=JetBrains+Mono:wght@400..500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 :root {
-  --font-body: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --bg: #0D0D0E;
-  --surface: #151516;
-  --surface-2: #1C1C1E;
-  --border: #2A2A2C;
-  --text: #ECE9E2;
-  --text-muted: #8E8B84;
-  --accent: #E8452C;
-  --accent-hover: #FF5A40;
-  --success: #4FA36B;
-  --warning: #D9A441;
-  --danger: #D4493E;
+
+  /* MangaDex Official Dark Design Tokens */
+  --bg: #191a1c;
+  --bg-darker: #131416;
+  --surface: #202125;
+  --surface-2: #2a2b30;
+  --surface-3: #32333a;
+  --border: #2e3036;
+  --border-strong: #3d3f47;
+
+  --text: #ffffff;
+  --text-secondary: #9ca3af;
+  --text-muted: #71717a;
+
+  /* MangaDex Signature Vibrant Warm Orange */
+  --accent: #ff6740;
+  --accent-hover: #ff7e59;
+  --accent-muted: rgba(255, 103, 64, 0.15);
+
+  --success: #22c55e;
+  --warning: #eab308;
+  --danger: #ef4444;
+  --blue: #3b82f6;
 }
 
 body {
@@ -27,23 +39,23 @@ body {
 
 .font-display {
   font-family: var(--font-display), -apple-system, BlinkMacSystemFont, sans-serif;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.015em;
 }
 
 .font-mono {
   font-family: var(--font-mono), monospace;
 }
 
-/* Custom scrollbars */
+/* Custom scrollbars - MangaDex style */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--border-strong);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -116,13 +128,13 @@ body {
   animation: pulseSubtle 2s ease-in-out infinite;
 }
 
-/* Animated active progress bar with running light shimmer */
+/* Animated active progress bar with running light shimmer - MangaDex Accent */
 .shimmer-progress {
   background: linear-gradient(
     90deg,
-    #E8452C 0%,
-    #FF7A66 50%,
-    #E8452C 100%
+    #ff6740 0%,
+    #ff8c69 50%,
+    #ff6740 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.8s infinite linear;
@@ -140,8 +152,8 @@ body {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
 }
 .card-lift:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(232, 69, 44, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 103, 64, 0.25);
 }
 
 

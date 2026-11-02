@@ -11,4 +11,5 @@ bin/
 node_modules/
 .next/
 dist/
+*.cany/
 
