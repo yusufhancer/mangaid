@@ -4,10 +4,11 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.5.3",
+    "version": "1.5.4",
     "release_date": "2 November 2026",
-    "title": "MangaID MangaDex Cache-Busted Image CDN & Dual Fallback",
+    "title": "MangaID Proxy Type Resolution & Instant Cache-Buster",
     "changelog": [
+        "Perbaikan Modul Proxy: Memperbaiki import type annotation Optional pada backend proxy image",
         "Instant Cache-Buster Gambar (?v=2): Mengatasi disk cache browser yang menyimpan respons kosong dengan parameter versi unik, memaksa browser mengambil gambar asli secara instan",
         "Perbaikan Pemuatan Cover MangaDex: Mengatasi gambar hitam/kosong dengan menyesuaikan User-Agent resmi MangaID pada proxy backend (menghindari Cloudflare edge verification di uploads.mangadex.org)",
         "Dual-Layer Fallback Otomatis: Klien web otomatis mencoba muat gambar langsung tanpa referer jika proxy mengalami jeda",

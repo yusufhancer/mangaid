@@ -1,4 +1,5 @@
 from urllib.parse import urlparse
+from typing import Optional
 from fastapi import APIRouter, Query, Response, HTTPException
 import httpx
 from ..ingestion.security import validate_url_safe
