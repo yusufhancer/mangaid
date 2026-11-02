@@ -3378,6 +3378,15 @@ export default function MangaIDApp() {
                               alt={explorerResults[carouselIdx]?.title}
                               referrerPolicy="no-referrer"
                               className="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                if (target.src.includes("/api/proxy/image?url=")) {
+                                  try {
+                                    const raw = decodeURIComponent(target.src.split("/api/proxy/image?url=")[1]);
+                                    if (raw && target.src !== raw) target.src = raw;
+                                  } catch {}
+                                }
+                              }}
                             />
                           )}
                           {explorerResults[carouselIdx]?.status && (
@@ -3694,6 +3703,15 @@ export default function MangaIDApp() {
                                   referrerPolicy="no-referrer"
                                   loading="lazy"
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  onError={(e) => {
+                                    const target = e.currentTarget;
+                                    if (target.src.includes("/api/proxy/image?url=")) {
+                                      try {
+                                        const raw = decodeURIComponent(target.src.split("/api/proxy/image?url=")[1]);
+                                        if (raw && target.src !== raw) target.src = raw;
+                                      } catch {}
+                                    }
+                                  }}
                                 />
                               ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center text-[#9ca3af]">
@@ -5520,6 +5538,15 @@ export default function MangaIDApp() {
                       alt={explorerSelectedManga.title}
                       referrerPolicy="no-referrer"
                       className="w-20 sm:w-24 aspect-[7/10] object-cover rounded-md border border-[#2e3036] shadow-xl flex-shrink-0"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (target.src.includes("/api/proxy/image?url=")) {
+                          try {
+                            const raw = decodeURIComponent(target.src.split("/api/proxy/image?url=")[1]);
+                            if (raw && target.src !== raw) target.src = raw;
+                          } catch {}
+                        }
+                      }}
                     />
                   )}
                   <div className="min-w-0 flex-1">

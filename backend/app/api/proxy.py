@@ -6,10 +6,8 @@ from ..core.logging import logger
 
 router = APIRouter(tags=["Proxy"])
 
+# Referer mapping for sites that require matching Referer headers
 ALLOWED_REFERER_MAP = {
-    "mangadex.org": "https://mangadex.org/",
-    "mangadex.network": "https://mangadex.org/",
-    "uploads.mangadex.org": "https://mangadex.org/",
     "komikindo.ch": "https://komikindo.ch/",
     "komikindo.tv": "https://komikindo.tv/",
     "nhentai.net": "https://nhentai.net/",
@@ -37,16 +35,23 @@ async def proxy_image(url: str = Query(..., description="Target image URL to pro
     parsed = urlparse(url)
     domain = parsed.hostname.lower() if parsed.hostname else ""
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-    }
+    is_mangadex = "mangadex.org" in domain or "mangadex.network" in domain
 
-    # Add appropriate Referer if target requires specific referer (e.g. MangaDex)
-    for domain_key, ref in ALLOWED_REFERER_MAP.items():
-        if domain == domain_key or domain.endswith("." + domain_key):
-            headers["Referer"] = ref
-            break
+    if is_mangadex:
+        # MangaDex requires its official identifying User-Agent and blocks requests with Referer
+        headers = {
+            "User-Agent": "MangaID/1.0 (https://github.com/mangaid-app)",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        }
+    else:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        }
+        for domain_key, ref in ALLOWED_REFERER_MAP.items():
+            if domain == domain_key or domain.endswith("." + domain_key):
+                headers["Referer"] = ref
+                break
 
     try:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
@@ -56,6 +61,11 @@ async def proxy_image(url: str = Query(..., description="Target image URL to pro
                 raise HTTPException(status_code=resp.status_code, detail="Failed to fetch image from upstream")
 
             content_type = resp.headers.get("content-type", "image/jpeg")
+            # If upstream returned an HTML challenge or webpage, reject it
+            if content_type.startswith("text/html") or resp.content.startswith(b"<!doctype html") or b"<html" in resp.content[:100]:
+                logger.warning("Proxy received HTML challenge instead of image for %s", url)
+                raise HTTPException(status_code=502, detail="Upstream returned HTML challenge instead of image")
+
             return Response(
                 content=resp.content,
                 status_code=200,

@@ -4,15 +4,15 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.5.1",
+    "version": "1.5.2",
     "release_date": "2 November 2026",
-    "title": "MangaID MangaDex True Split Architecture & Zero-Click Popular Catalog",
+    "title": "MangaID MangaDex Bulletproof Image CDN Proxy & Dual Fallback",
     "changelog": [
+        "Perbaikan Pemuatan Cover MangaDex: Mengatasi gambar hitam/kosong dengan menyesuaikan User-Agent resmi MangaID pada proxy backend (menghindari Cloudflare edge verification di uploads.mangadex.org)",
+        "Dual-Layer Fallback Otomatis: Klien web kini otomatis mencoba muat gambar langsung tanpa referer (referrerPolicy no-referrer) jika proxy mengalami jeda",
         "Pemisahan 3 Halaman Utama Dedikasi: Navigasi bersih terbagi utuh antara Jelajah (Katalog Manga), Penerjemah (Studio Translasi AI), dan Koleksi (Perpustakaan Pribadi & Riwayat)",
-        "Zero-Click Popular Manga Homepage: Saat pertama kali membuka MangaID, 24 manga terpopuler langsung tampil otomatis layaknya beranda MangaDex tanpa perlu mencari manual",
-        "Featured Hero Banner Carousel: Banner unggulan dinamis dengan latar blur sinematik, poster rasio 7:10, tag genre, sinopsis cerita, dan navigasi slide",
-        "Pemilih Sumber Web Cepat: Tombol sumber di bagian atas Jelajah (🌐 MangaDex, 🇮🇩 Komik Indo, 🔞 nhentai, 🇯🇵 RAW Manga) yang otomatis menyegarkan katalog populer sumber bersangkutan",
-        "Stabilitas & Logika 100% Utuh: Mesin penerjemah AI, pembaca slide/webtoon, audiobook per slide, dan dual-sync database tetap berjalan sempurna"
+        "Zero-Click Popular Manga Homepage: 24 manga terpopuler langsung tampil otomatis saat web dibuka",
+        "Featured Hero Banner Carousel: Banner unggulan dinamis dengan latar blur sinematik, poster rasio 7:10, tag genre, dan sinopsis cerita"
     ]
 }
 
