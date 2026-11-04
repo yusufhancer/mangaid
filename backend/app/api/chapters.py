@@ -374,16 +374,19 @@ def get_chapter_detail(chapter_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=err_msg)
 
 def _recover_mangadex_chapter_urls(title: str, ch_num: Optional[str]) -> List[str]:
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MangaID/1.5"}
     try:
-        clean_title = re.sub(r"[\(\)\[\]]", " ", title).strip()
-        with httpx.Client(timeout=8.0) as client:
-            m_res = client.get("https://api.mangadex.org/manga", params={"title": title[:40], "limit": 1}).json()
+        clean_title = re.sub(r"[\(\)\[\]\-_]", " ", title).strip()
+        words = [w for w in clean_title.split() if len(w) > 2]
+        query_title = " ".join(words[:4]) if words else title
+        with httpx.Client(timeout=10.0, headers=headers) as client:
+            m_res = client.get("https://api.mangadex.org/manga", params={"title": query_title, "limit": 1}).json()
             if not m_res.get("data"):
-                m_res = client.get("https://api.mangadex.org/manga", params={"title": clean_title[:30], "limit": 1}).json()
+                m_res = client.get("https://api.mangadex.org/manga", params={"title": title[:30], "limit": 1}).json()
             if not m_res.get("data"):
                 return []
             manga_id = m_res["data"][0]["id"]
-            feed_params = {"order[chapter]": "asc", "limit": 50}
+            feed_params = {"order[chapter]": "asc", "limit": 100}
             feed_res = client.get(f"https://api.mangadex.org/manga/{manga_id}/feed", params=feed_params).json()
             data = feed_res.get("data", [])
             target_ch = None
@@ -410,7 +413,7 @@ def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depend
         PageRecord.chapter_id == chapter_id,
         PageRecord.page_number == page_num
     ).first()
-    if record and record.original_path:
+    if record and record.original_path and not record.original_path.startswith("/api/"):
         if record.original_path.startswith("http"):
             return RedirectResponse(f"/api/proxy/image?url={quote(record.original_path, safe='')}")
         resolved = resolve_stored_path(record.original_path, chapter_id, page_num, "original")
