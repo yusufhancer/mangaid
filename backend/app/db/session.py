@@ -59,26 +59,17 @@ def init_db():
                 seed_path = next((p for p in candidate_paths if p.exists()), None)
                 if seed_path:
                     sql_text = seed_path.read_text(encoding="utf-8")
-                    if is_sqlite:
-                        import sqlite3
-                        clean_url = db_url.split("?", 1)[0]
-                        if clean_url.startswith("sqlite:////"):
-                            db_file = "/" + clean_url[len("sqlite:////"):]
-                        elif clean_url.startswith("sqlite:///"):
-                            db_file = clean_url[len("sqlite:///"):]
-                        else:
-                            db_file = clean_url.replace("sqlite://", "")
-
-                        raw_con = sqlite3.connect(db_file)
-                        raw_con.executescript(sql_text)
-                        raw_con.commit()
-                        raw_con.close()
+                    dbapi_conn = getattr(conn.connection, "dbapi_connection", None) or getattr(conn.connection, "driver_connection", None)
+                    if dbapi_conn and hasattr(dbapi_conn, "executescript"):
+                        dbapi_conn.executescript(sql_text)
+                        conn.commit()
+                        print(f"[MangaID] Auto-seeded initial collection from {seed_path}")
                     else:
                         for stmt in sql_text.split(";"):
                             stmt_clean = stmt.strip()
                             if stmt_clean:
                                 conn.execute(text(stmt_clean))
                         conn.commit()
-                    print(f"[MangaID] Auto-seeded initial collection from {seed_path}")
+                        print(f"[MangaID] Auto-seeded initial collection (fallback) from {seed_path}")
         except Exception as e:
             print(f"[MangaID] Warning: auto-seed initial collection skipped: {e}")
