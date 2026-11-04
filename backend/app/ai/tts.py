@@ -52,12 +52,19 @@ MALE_CLUES = [
 
 def classify_character_acting(
     dialogue: Dict[str, Any],
-    default_voice_mode: str = "auto"
+    default_voice_mode: str = "auto",
+    voice_override: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Classifies character role, Gemini voice, and rich acting emotion prompt.
     Includes seamless Edge-TTS fallback parameters.
-    Respects page and chapter gender context so all-female manga retains an all-female voice cast.
+    Ensures distinct voice acting personas:
+    - Narration: Fenrir (clear, cinematic comic narrator)
+    - Female protagonist / girls: Aoede (expressive, fearful, soft anime girl)
+    - Second female character: Kore (cheerful, distinct female voice)
+    - Monsters / Horrors: Charon (deep, chilling horror whisper)
+    - Young males: Puck (energetic, casual anime boy)
+    - Adult males: Fenrir (mature, authoritative)
     """
     text = dialogue.get("text", "").strip()
     r_type = dialogue.get("type", "dialogue")
@@ -66,20 +73,34 @@ def classify_character_acting(
     gender_bias = dialogue.get("gender_bias", "neutral")
     lowered = text.lower()
 
-    # 1. Monster / Ghost / Creature (Chilling Horror Acting)
-    monster_clues = ["monster", "ghost", "hantu", "demon", "creature", "iblis", "setan", "makhluk", "beast", "zombie", "alien"]
-    if any(k in speaker for k in monster_clues):
+    # 1. Narration handling: The narrator is ALWAYS distinct from dialogue characters!
+    # Narration sets the scene with calm authority and dramatic storytelling gravitas.
+    if r_type == "narration" or "narator" in speaker or "narrator" in speaker:
+        return {
+            "gemini_voice": "Fenrir",
+            "edge_voice": "id-ID-ArdiNeural",
+            "edge_rate": "-4%",
+            "edge_pitch": "-12Hz",
+            "edge_vol": "+10%",
+            "role_desc": "Narator komik profesional",
+            "acting_desc": "Intonasi narasi cerita yang berwibawa, jernih, dan memikat pembaca.",
+        }
+
+    # 2. Monster / Ghost / Creature (Chilling Horror Acting)
+    monster_clues = ["monster", "ghost", "hantu", "demon", "creature", "iblis", "setan", "makhluk", "beast", "zombie", "alien", "shadow", "bayangan"]
+    creepy_text_cues = ["kelihatannn", "bisa liat", "bisa lihat", "kau melihatku", "kamu melihatku", "hihihi", "hehehe", "mati kau", "ketemu kau"]
+    if any(k in speaker for k in monster_clues) or any(k in gender for k in monster_clues) or any(k in lowered for k in creepy_text_cues):
         return {
             "gemini_voice": "Charon",
             "edge_voice": "id-ID-ArdiNeural",
-            "edge_rate": "-10%",
-            "edge_pitch": "-18Hz",
+            "edge_rate": "-12%",
+            "edge_pitch": "-20Hz",
             "edge_vol": "+20%",
             "role_desc": "Makhluk monster / hantu yang mengerikan",
             "acting_desc": "Suara berat, dingin, berbisik misterius dan menakutkan, membuat bulu kuduk merinding.",
         }
 
-    # 2. Gender determination
+    # 3. Gender determination
     is_female = False
     if default_voice_mode == "gadis":
         is_female = True
@@ -103,31 +124,6 @@ def classify_character_acting(
         else:
             is_female = False
 
-    # 3. Narration handling
-    # In manga, rectangular narration boxes are overwhelmingly the protagonist's inner voice.
-    # If the page/chapter has a female protagonist or is all-female, narrator uses a female voice.
-    if r_type == "narration" or "narator" in speaker or "narrator" in speaker:
-        if is_female:
-            return {
-                "gemini_voice": "Aoede",
-                "edge_voice": "id-ID-GadisNeural",
-                "edge_rate": "-2%",
-                "edge_pitch": "+2Hz",
-                "edge_vol": "+5%",
-                "role_desc": "Narator wanita anime",
-                "acting_desc": "Intonasi narasi batin cerita anime yang lembut, jernih, dan menyentuh.",
-            }
-        else:
-            return {
-                "gemini_voice": "Fenrir",
-                "edge_voice": "id-ID-ArdiNeural",
-                "edge_rate": "-4%",
-                "edge_pitch": "-12Hz",
-                "edge_vol": "+10%",
-                "role_desc": "Narator komik profesional",
-                "acting_desc": "Intonasi narasi cerita yang berwibawa, jernih, dan memikat pembaca.",
-            }
-
     # 4. Punctuation & Emotion Nuances
     is_shouting = (
         text.endswith("!") or
@@ -143,7 +139,7 @@ def classify_character_acting(
     is_question = text.endswith("?")
 
     if is_female:
-        gemini_voice = "Aoede"
+        gemini_voice = voice_override if voice_override else "Aoede"
         edge_voice = "id-ID-GadisNeural"
         role_desc = "Karakter cewek anime"
         if is_thought:
@@ -159,7 +155,7 @@ def classify_character_acting(
             acting_desc = "Gadis anime berbicara santai, hidup, hangat, dan ekspresif."
             edge_rate, edge_pitch, edge_vol = "+4%", "+4Hz", "+0%"
     else:
-        gemini_voice = "Puck" if any(w in lowered for w in ["bocah", "bro", "hei", "haha", "aku", "gua"]) else "Fenrir"
+        gemini_voice = voice_override if voice_override else ("Puck" if any(w in lowered for w in ["bocah", "bro", "hei", "haha", "aku", "gua"]) else "Fenrir")
         edge_voice = "id-ID-ArdiNeural"
         role_desc = "Karakter cowok anime"
         if is_thought:
@@ -297,10 +293,10 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
 import time
 
 TTS_MODELS = [
-    "gemini-2.5-flash-preview-tts",
-    "gemini-3.1-flash-tts-preview",
     "gemini-3.8-flash-tts",
     "gemini-3.8-flash-lite-tts",
+    "gemini-3.1-flash-tts-preview",
+    "gemini-2.5-flash-preview-tts",
 ]
 
 # Blacklist known leaked/deactivated keys to prevent wasting 403 API calls
@@ -352,14 +348,24 @@ def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
                         for part in parts:
                             inline = part.get("inlineData")
                             if inline and inline.get("data"):
+                                raw_bytes = base64.b64decode(inline["data"])
+                                mime = inline.get("mimeType", "")
+                                if not raw_bytes.startswith(b"RIFF") and "l16" in mime:
+                                    buf = io.BytesIO()
+                                    with wave.open(buf, "wb") as w:
+                                        w.setnchannels(1)
+                                        w.setsampwidth(2)
+                                        w.setframerate(24000)
+                                        w.writeframes(raw_bytes)
+                                    raw_bytes = buf.getvalue()
                                 logger.info("Gemini TTS (%s, voice %s) successfully synthesized dialogue (%d chars)", model_name, voice_name, len(clean_text))
-                                return base64.b64decode(inline["data"])
+                                return raw_bytes
                     elif resp.status_code in (401, 403):
                         logger.warning("Gemini key ...%s returned %d for %s. Rotating key...", api_key[-4:] if len(api_key) > 4 else "", resp.status_code, model_name)
                         break  # Key is invalid/leaked -> move to next key immediately
                     elif resp.status_code == 429:
-                        logger.info("Gemini TTS rate limited on %s. Rotating key...", model_name)
-                        break  # Key hit RPM/RPD -> move to next key immediately
+                        logger.info("Gemini TTS %s rate limited. Trying next model...", model_name)
+                        continue  # Try next model in TTS_MODELS before giving up on key
                     else:
                         logger.debug("Gemini TTS REST %s returned %d: %s", model_name, resp.status_code, resp.text[:120])
                         continue
@@ -640,7 +646,24 @@ async def get_or_generate_page_audio(
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Attempt Primary: Gemini Flash Generative Acting TTS
-    specs = [classify_character_acting(d, default_voice_mode=voice_key) for d in dialogues]
+    # Track distinct female speakers on this page to assign distinct voices (Aoede & Kore)
+    female_spks: List[str] = []
+    for d in dialogues:
+        spk = (d.get("speaker") or "").strip()
+        gen = (d.get("gender") or "").strip().lower()
+        if spk and spk not in female_spks:
+            if gen in ("female", "f", "wanita", "cewek", "gadis") or any(k in spk.lower() for k in FEMALE_CLUES):
+                female_spks.append(spk)
+
+    specs = []
+    for d in dialogues:
+        spk = (d.get("speaker") or "").strip()
+        override = None
+        if len(female_spks) > 1 and spk == female_spks[1]:
+            # Secondary female speaker gets distinct voice Kore
+            override = "Kore"
+        specs.append(classify_character_acting(d, default_voice_mode=voice_key, voice_override=override))
+
     gemini_voices = [s["gemini_voice"] for s in specs]
 
     # Quota optimization: If page shares the same voice, send full page in 1 single API call!
@@ -761,7 +784,7 @@ async def synthesize_single_bubble(text: str, voice_key: str = "auto") -> Option
     spec = classify_character_acting(dummy_d, default_voice_mode=voice_key)
 
     # 1. Try Gemini
-    if settings.GEMINI_API_KEY:
+    if get_gemini_api_keys():
         gemini_chunk = await asyncio.to_thread(
             _call_gemini_tts_sync,
             clean_text,
