@@ -1826,7 +1826,14 @@ export default function MangaIDApp() {
           };
           const updated = [newEntry, ...currentHistory.filter((c) => c.id !== savedData.id)];
           localStorage.setItem("mangaid_user_history", JSON.stringify(updated));
-          localStorage.setItem(`mangaid_detail_${savedData.id}`, JSON.stringify(savedData));
+          const detailWithRealUrls = {
+            ...savedData,
+            pages: savedData.pages.map((p, idx) => ({
+              ...p,
+              image_url: pageUrls[idx] || (p as any).image_url,
+            }))
+          };
+          localStorage.setItem(`mangaid_detail_${savedData.id}`, JSON.stringify(detailWithRealUrls));
         } catch (e) {
           console.warn("Local history cache error:", e);
         }
@@ -2013,7 +2020,9 @@ export default function MangaIDApp() {
                   if (det) {
                     const parsedDet = JSON.parse(det);
                     if (parsedDet && Array.isArray(parsedDet.pages)) {
-                      pages = parsedDet.pages.map((p: any) => p.original_url || p.image_url || p.translated_url);
+                      pages = parsedDet.pages
+                        .map((p: any) => p.image_url || (p.original_url?.startsWith("http") ? p.original_url : undefined))
+                        .filter(Boolean);
                     }
                   }
                 } catch {}
@@ -2038,7 +2047,9 @@ export default function MangaIDApp() {
                 if (det) {
                   const parsedDet = JSON.parse(det);
                   if (parsedDet && Array.isArray(parsedDet.pages)) {
-                    pages = parsedDet.pages.map((p: any) => p.original_url || p.image_url || p.translated_url);
+                    pages = parsedDet.pages
+                      .map((p: any) => p.image_url || (p.original_url?.startsWith("http") ? p.original_url : undefined))
+                      .filter(Boolean);
                   }
                 }
               } catch {}
@@ -4742,6 +4753,13 @@ export default function MangaIDApp() {
                           src={curImgSrc}
                           alt={`Halaman ${curPage.page_number} (${isTrans ? "Terjemahan" : "Asli"})`}
                           className="max-h-[82vh] w-auto max-w-full object-contain rounded-[4px] shadow-2xl block"
+                          onError={(e) => {
+                            const target = e.currentTarget as HTMLImageElement;
+                            if (!target.dataset.triedOriginal && curPage.original_url) {
+                              target.dataset.triedOriginal = "true";
+                              target.src = `${BACKEND_URL}${curPage.original_url}?v=fallback`;
+                            }
+                          }}
                         />
 
                         {/* Left Tap Zone (Previous Page) */}
@@ -4954,6 +4972,13 @@ export default function MangaIDApp() {
                         alt={`Halaman ${p.page_number} (${isTrans ? "Terjemahan" : "Asli"})`}
                         loading="lazy"
                         className="w-full h-auto block select-none"
+                        onError={(e) => {
+                          const target = e.currentTarget as HTMLImageElement;
+                          if (!target.dataset.triedOriginal && p.original_url) {
+                            target.dataset.triedOriginal = "true";
+                            target.src = `${BACKEND_URL}${p.original_url}?v=fallback`;
+                          }
+                        }}
                       />
                     </div>
                   );

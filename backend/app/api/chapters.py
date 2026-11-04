@@ -1,10 +1,12 @@
 import io
 import os
+import re
 import shutil
 import uuid
 from urllib.parse import quote
 from pathlib import Path
 from typing import List, Optional
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response, RedirectResponse
 from pydantic import BaseModel
@@ -106,12 +108,13 @@ def sync_chapters(payload: SyncChaptersRequest, request: Request, db: Session = 
 
             if ch_item.pages and len(ch_item.pages) > 0:
                 for idx, p_url in enumerate(ch_item.pages, start=1):
+                    clean_p = p_url if (p_url and p_url.startswith("http")) else ""
                     rec = PageRecord(
                         id=str(uuid.uuid4()),
                         chapter_id=ch_item.id,
                         page_number=idx,
-                        original_path=p_url,
-                        translated_path=p_url,
+                        original_path=clean_p,
+                        translated_path=clean_p,
                         status="rendered"
                     )
                     db.add(rec)
@@ -131,12 +134,13 @@ def sync_chapters(payload: SyncChaptersRequest, request: Request, db: Session = 
         else:
             if len(existing.pages) == 0 and ch_item.pages and len(ch_item.pages) > 0:
                 for idx, p_url in enumerate(ch_item.pages, start=1):
+                    clean_p = p_url if (p_url and p_url.startswith("http")) else ""
                     rec = PageRecord(
                         id=str(uuid.uuid4()),
                         chapter_id=ch_item.id,
                         page_number=idx,
-                        original_path=p_url,
-                        translated_path=p_url,
+                        original_path=clean_p,
+                        translated_path=clean_p,
                         status="rendered"
                     )
                     db.add(rec)
@@ -369,6 +373,37 @@ def get_chapter_detail(chapter_id: str, db: Session = Depends(get_db)):
         logger.error(err_msg)
         raise HTTPException(status_code=500, detail=err_msg)
 
+def _recover_mangadex_chapter_urls(title: str, ch_num: Optional[str]) -> List[str]:
+    try:
+        clean_title = re.sub(r"[\(\)\[\]]", " ", title).strip()
+        with httpx.Client(timeout=8.0) as client:
+            m_res = client.get("https://api.mangadex.org/manga", params={"title": title[:40], "limit": 1}).json()
+            if not m_res.get("data"):
+                m_res = client.get("https://api.mangadex.org/manga", params={"title": clean_title[:30], "limit": 1}).json()
+            if not m_res.get("data"):
+                return []
+            manga_id = m_res["data"][0]["id"]
+            feed_params = {"order[chapter]": "asc", "limit": 50}
+            feed_res = client.get(f"https://api.mangadex.org/manga/{manga_id}/feed", params=feed_params).json()
+            data = feed_res.get("data", [])
+            target_ch = None
+            if ch_num:
+                target_ch = next((c for c in data if c.get("attributes", {}).get("chapter") == ch_num), None)
+            if not target_ch and data:
+                target_ch = data[0]
+            if not target_ch:
+                return []
+            ch_id = target_ch["id"]
+            athome_res = client.get(f"https://api.mangadex.org/at-home/server/{ch_id}").json()
+            base_url = athome_res.get("baseUrl")
+            ch_hash = athome_res.get("chapter", {}).get("hash")
+            files = athome_res.get("chapter", {}).get("data", [])
+            if base_url and ch_hash and files:
+                return [f"{base_url}/data/{ch_hash}/{fn}" for fn in files]
+    except Exception as e:
+        logger.warning("Failed to auto-recover MangaDex URLs for %s (%s): %s", title, ch_num, e)
+    return []
+
 @router.get("/{chapter_id}/pages/{page_num}/original")
 def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depends(get_db)):
     record = db.query(PageRecord).filter(
@@ -391,6 +426,21 @@ def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depend
         return FileResponse(str(jpg_path), media_type="image/jpeg")
     if png_path.exists():
         return FileResponse(str(png_path), media_type="image/png")
+
+    # AUTO-HEAL: If image is missing, attempt to recover from MangaDex online by chapter title & number
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    if chapter and chapter.title:
+        recovered_urls = _recover_mangadex_chapter_urls(chapter.title, chapter.chapter_number)
+        if recovered_urls:
+            all_records = db.query(PageRecord).filter(PageRecord.chapter_id == chapter_id).order_by(PageRecord.page_number).all()
+            for idx, rec in enumerate(all_records):
+                if idx < len(recovered_urls):
+                    rec.original_path = recovered_urls[idx]
+                    if not rec.translated_path or not rec.translated_path.startswith("http"):
+                        rec.translated_path = recovered_urls[idx]
+            db.commit()
+            if 1 <= page_num <= len(recovered_urls):
+                return RedirectResponse(f"/api/proxy/image?url={quote(recovered_urls[page_num - 1], safe='')}")
 
     raise HTTPException(status_code=404, detail="Original image not found.")
 
@@ -417,7 +467,8 @@ def get_translated_page_image(chapter_id: str, page_num: int, db: Session = Depe
     if jpg_path.exists():
         return FileResponse(str(jpg_path), media_type="image/jpeg")
 
-    raise HTTPException(status_code=404, detail="Translated image not found.")
+    # Fallback to original image if translated image does not exist yet
+    return get_original_page_image(chapter_id, page_num, db)
 
 @router.get("/local-file/{session_id}/{filename}")
 def get_uploaded_file(session_id: str, filename: str):
