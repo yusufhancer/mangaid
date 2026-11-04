@@ -2,13 +2,23 @@ import os
 import io
 import json
 import wave
+import base64
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-import edge_tts
+import httpx
+try:
+    import edge_tts
+except ImportError:
+    edge_tts = None
+
 from sqlalchemy.orm import Session
-from google import genai
-from google.genai import types
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 import re
 from ..core.config import settings
@@ -279,17 +289,27 @@ def get_page_dialogues(chapter_id: str, page_number: int, db: Session) -> List[D
 import time
 
 TTS_MODELS = [
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-exp",
+    "gemini-2.5-flash-preview-tts",
+    "gemini-3.1-flash-tts-preview",
+    "gemini-3.8-flash-tts",
+    "gemini-3.8-flash-lite-tts",
 ]
 
+# Blacklist known leaked/deactivated keys to prevent wasting 403 API calls
+LEAKED_KEYS_BLACKLIST = {
+    "AIzaSyAydNtPiy2cahaTH1p7Hn79C6oHeUEjNZs",
+}
+
 def get_gemini_api_keys() -> List[str]:
-    """Retrieves all configured Gemini API keys supporting rotation."""
-    return settings.gemini_api_keys
+    """Retrieves all configured Gemini API keys supporting rotation, filtering out blacklisted leaked keys."""
+    raw_keys = settings.gemini_api_keys
+    valid_keys = [k.strip() for k in raw_keys if k.strip() and k.strip() not in LEAKED_KEYS_BLACKLIST]
+    return valid_keys if valid_keys else raw_keys
 
 def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
-    """Synchronous Google GenAI Gemini TTS call speaking ONLY the pure dialogue.
-    Automatically rotates through all configured GEMINI_API_KEYs and models."""
+    """Synchronous Google GenAI Gemini TTS call speaking pure anime character dialogue.
+    Automatically rotates through all configured GEMINI_API_KEYs and models.
+    Uses direct REST API and google-genai SDK for maximal stability, speed, and authentic expression."""
     keys = get_gemini_api_keys()
     if not keys:
         return None
@@ -297,42 +317,80 @@ def _call_gemini_tts_sync(text: str, voice_name: str) -> Optional[bytes]:
     if not clean_text or not any(c.isalnum() for c in clean_text):
         return None
 
-    # Limit key tries to first 2 keys and 1 model to avoid long timeouts
-    for api_key in keys[:2]:
-        try:
-            client = genai.Client(api_key=api_key)
-        except Exception as err:
-            logger.error("Failed to initialize GenAI client: %s", err)
-            continue
-
-        for model_name in TTS_MODELS[:1]:
+    # Rotate across all active keys
+    for api_key in keys:
+        for model_name in TTS_MODELS:
+            # 1. Primary: Direct REST call (fastest, guaranteed 24000Hz PCM bytes)
             try:
-                resp = client.models.generate_content(
-                    model=model_name,
-                    contents=clean_text,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["AUDIO"],
-                        speech_config=types.SpeechConfig(
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                    voice_name=voice_name
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": clean_text}]}],
+                    "generationConfig": {
+                        "responseModalities": ["AUDIO"],
+                        "speechConfig": {
+                            "voiceConfig": {
+                                "prebuiltVoiceConfig": {
+                                    "voiceName": voice_name
+                                }
+                            }
+                        }
+                    }
+                }
+                with httpx.Client(timeout=15.0) as client:
+                    resp = client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                        for part in parts:
+                            inline = part.get("inlineData")
+                            if inline and inline.get("data"):
+                                logger.info("Gemini TTS (%s, voice %s) successfully synthesized dialogue (%d chars)", model_name, voice_name, len(clean_text))
+                                return base64.b64decode(inline["data"])
+                    elif resp.status_code in (401, 403):
+                        logger.warning("Gemini key ...%s returned %d for %s. Rotating key...", api_key[-4:] if len(api_key) > 4 else "", resp.status_code, model_name)
+                        break  # Key is invalid/leaked -> move to next key immediately
+                    elif resp.status_code == 429:
+                        logger.info("Gemini TTS rate limited on %s. Rotating key...", model_name)
+                        break  # Key hit RPM/RPD -> move to next key immediately
+                    else:
+                        logger.debug("Gemini TTS REST %s returned %d: %s", model_name, resp.status_code, resp.text[:120])
+                        continue
+            except Exception as e:
+                logger.debug("Gemini TTS REST error on %s: %s", model_name, e)
+
+            # 2. Secondary: google-genai Client SDK fallback
+            if genai is not None:
+                try:
+                    client = genai.Client(api_key=api_key)
+                    resp = client.models.generate_content(
+                        model=model_name,
+                        contents=clean_text,
+                        config=types.GenerateContentConfig(
+                            response_modalities=["AUDIO"],
+                            speech_config=types.SpeechConfig(
+                                voice_config=types.VoiceConfig(
+                                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                        voice_name=voice_name
+                                    )
                                 )
                             )
                         )
                     )
-                )
-                if resp.candidates and resp.candidates[0].content.parts:
-                    for part in resp.candidates[0].content.parts:
-                        if part.inline_data and part.inline_data.data:
-                            return part.inline_data.data
-            except Exception as e:
-                logger.debug("Gemini TTS %s failed: %s", model_name, e)
-                continue
+                    if resp.candidates and resp.candidates[0].content.parts:
+                        for part in resp.candidates[0].content.parts:
+                            if part.inline_data and part.inline_data.data:
+                                logger.info("Gemini SDK TTS (%s, voice %s) generated audio", model_name, voice_name)
+                                return part.inline_data.data
+                except Exception as sdk_e:
+                    logger.debug("Gemini TTS SDK error on %s: %s", model_name, sdk_e)
+                    continue
 
     return None
 
 async def _call_edge_tts(text: str, voice_name: str, rate: str = "+0%", pitch: str = "+0Hz", volume: str = "+0%") -> Optional[bytes]:
     """Fallback Edge-TTS neural synthesizer. Fast, high-fidelity Indonesian neural voice."""
+    if edge_tts is None:
+        return None
     clean_text = text.strip()
     if not clean_text:
         return None
@@ -428,6 +486,29 @@ async def get_or_generate_page_audio(
         ch_title = (chapter.title if chapter and chapter.title else "Komik").strip()
         ch_num = chapter.chapter_number if chapter and chapter.chapter_number else "1"
         announcement = f"Halaman {page_number}. Bab {ch_num}. Tidak ada dialog pada halaman ini."
+        
+        # 1. Primary: Gemini Announcement TTS
+        gem_voice = "Aoede" if voice_key == "gadis" else ("Fenrir" if voice_key == "ardi" else "Aoede")
+        gem_chunk = await asyncio.to_thread(_call_gemini_tts_sync, announcement, gem_voice)
+        if gem_chunk and len(gem_chunk) > 500:
+            if not gem_chunk.startswith(b"RIFF"):
+                buf = io.BytesIO()
+                with wave.open(buf, "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(24000)
+                    w.writeframes(gem_chunk)
+                full_wav = buf.getvalue()
+            else:
+                full_wav = gem_chunk
+
+            with open(wav_path, "wb") as f_out:
+                f_out.write(full_wav)
+            if wav_path.exists() and wav_path.stat().st_size > 500:
+                mp3_path.unlink(missing_ok=True)
+                return wav_path
+
+        # 2. Emergency Backup: Edge-TTS
         edge_voice = "id-ID-GadisNeural" if voice_key == "gadis" else "id-ID-ArdiNeural"
         chunk = await _call_edge_tts(announcement, edge_voice)
         if chunk and len(chunk) > 200:
@@ -448,7 +529,7 @@ async def get_or_generate_page_audio(
         single_voice = gemini_voices[0]
         combined_text = " ... ".join(d["text"].strip() for d in dialogues if d["text"].strip())
         chunk = await asyncio.to_thread(_call_gemini_tts_sync, combined_text, single_voice)
-        if chunk and len(chunk) > 1000:
+        if chunk and len(chunk) > 500:
             if not chunk.startswith(b"RIFF"):
                 buf = io.BytesIO()
                 with wave.open(buf, "wb") as w:
@@ -464,6 +545,7 @@ async def get_or_generate_page_audio(
                 f_out.write(full_wav)
             if wav_path.exists() and wav_path.stat().st_size > 500:
                 logger.info("Generated batch Gemini TTS page audio for p%d", page_number)
+                mp3_path.unlink(missing_ok=True)
                 return wav_path
 
     # Multi-voice page: Group consecutive bubbles of the same speaker/voice
@@ -493,7 +575,7 @@ async def get_or_generate_page_audio(
 
     for grp_text, grp_voice in grouped_segments:
         chunk = await asyncio.to_thread(_call_gemini_tts_sync, grp_text, grp_voice)
-        if chunk and len(chunk) > 1000:
+        if chunk and len(chunk) > 500:
             gemini_segments.append(chunk)
         else:
             gemini_failed = True
@@ -506,6 +588,7 @@ async def get_or_generate_page_audio(
                 f_out.write(stitched_wav)
             if wav_path.exists() and wav_path.stat().st_size > 500:
                 logger.info("Successfully generated page audio via Gemini Flash TTS for p%d", page_number)
+                mp3_path.unlink(missing_ok=True)
                 return wav_path
 
     # 2. Backup Fallback: Edge-TTS Neural Stitching
