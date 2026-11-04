@@ -194,45 +194,63 @@ def create_direct_read(payload: DirectReadRequest, request: Request, db: Session
 
 @router.get("", response_model=List[ChapterSummaryResponse])
 def list_chapters(request: Request, db: Session = Depends(get_db)):
-    device_id = request.headers.get("x-device-id") or "default"
-    query = db.query(Chapter)
-    if device_id == "default":
-        query = query.filter((Chapter.device_id == "default") | (Chapter.device_id.is_(None)))
-    else:
-        # Include this device's chapters plus default/unassigned ones to prevent data loss across updates
-        query = query.filter(
-            (Chapter.device_id == device_id) |
-            (Chapter.device_id == "default") |
-            (Chapter.device_id.is_(None))
-        )
-    chapters = query.order_by(Chapter.created_at.desc()).all()
-    res = []
-    for c in chapters:
-        pages_map = {}
-        for p in c.pages:
-            if p.page_number not in pages_map or p.status == "rendered":
-                pages_map[p.page_number] = p
-        rendered = sum(
-            1 for p in pages_map.values()
-            if p.status == "rendered" and (
-                (p.translated_path and (os.path.exists(p.translated_path) or resolve_stored_path(p.translated_path, c.id, p.page_number, "translated") is not None))
-                or (p.original_path and p.original_path.startswith("http"))
-                or (p.translated_path and p.translated_path.startswith("http"))
-                or (not p.original_path and not p.translated_path) # placeholder for restored chapters
-                or p.regions_json # pre-seeded chapters with dialogues
+    try:
+        device_id = request.headers.get("x-device-id") or "default"
+        query = db.query(Chapter)
+        if device_id == "default":
+            query = query.filter((Chapter.device_id == "default") | (Chapter.device_id.is_(None)))
+        else:
+            query = query.filter(
+                (Chapter.device_id == device_id) |
+                (Chapter.device_id == "default") |
+                (Chapter.device_id.is_(None))
             )
-        )
-        total_p = len(pages_map)
-        res.append(ChapterSummaryResponse(
-            id=c.id,
-            title=c.title,
-            chapter_number=c.chapter_number,
-            language_source=c.language_source,
-            total_pages=total_p if total_p > 0 else 1,
-            rendered_pages=rendered if total_p > 0 else 1,
-            created_at=c.created_at.isoformat() if c.created_at else None
-        ))
-    return res
+        chapters = query.all()
+        def sort_key(ch):
+            if ch.created_at:
+                return str(ch.created_at)
+            return ""
+        chapters.sort(key=sort_key, reverse=True)
+
+        res = []
+        for c in chapters:
+            pages_map = {}
+            for p in c.pages:
+                if p.page_number not in pages_map or p.status == "rendered":
+                    pages_map[p.page_number] = p
+            rendered = sum(
+                1 for p in pages_map.values()
+                if p.status == "rendered" and (
+                    (p.translated_path and (os.path.exists(p.translated_path) or resolve_stored_path(p.translated_path, c.id, p.page_number, "translated") is not None))
+                    or (p.original_path and p.original_path.startswith("http"))
+                    or (p.translated_path and p.translated_path.startswith("http"))
+                    or (not p.original_path and not p.translated_path)
+                    or p.regions_json
+                )
+            )
+            total_p = len(pages_map)
+            created_str = None
+            if c.created_at:
+                try:
+                    created_str = c.created_at.isoformat() if hasattr(c.created_at, "isoformat") else str(c.created_at)
+                except Exception:
+                    created_str = str(c.created_at)
+
+            res.append(ChapterSummaryResponse(
+                id=c.id,
+                title=c.title,
+                chapter_number=c.chapter_number,
+                language_source=c.language_source or "en",
+                total_pages=total_p if total_p > 0 else 1,
+                rendered_pages=rendered if total_p > 0 else 1,
+                created_at=created_str
+            ))
+        return res
+    except Exception as e:
+        import traceback
+        err_msg = f"list_chapters error: {e}\n{traceback.format_exc()}"
+        logger.error(err_msg)
+        raise HTTPException(status_code=500, detail=err_msg)
 
 class ChapterUpdateRequest(BaseModel):
     title: Optional[str] = None
@@ -311,37 +329,45 @@ def delete_series(payload: SeriesDeleteRequest, request: Request, db: Session = 
 
 @router.get("/{chapter_id}", response_model=ChapterDetailResponse)
 def get_chapter_detail(chapter_id: str, db: Session = Depends(get_db)):
-    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
-    if not chapter:
-        raise HTTPException(status_code=404, detail="Chapter not found.")
+    try:
+        chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+        if not chapter:
+            raise HTTPException(status_code=404, detail="Chapter not found.")
 
-    pages_map = {}
-    for p in chapter.pages:
-        if p.page_number not in pages_map or p.status == "rendered":
-            pages_map[p.page_number] = p
+        pages_map = {}
+        for p in chapter.pages:
+            if p.page_number not in pages_map or p.status == "rendered":
+                pages_map[p.page_number] = p
 
-    pages_resp = []
-    for p_num in sorted(pages_map.keys()):
-        p = pages_map[p_num]
-        has_trans = bool(
-            (p.translated_path and (os.path.exists(p.translated_path) or resolve_stored_path(p.translated_path, chapter_id, p.page_number, "translated") is not None))
-            or (p.translated_path and p.translated_path.startswith("http"))
-            or (p.status == "rendered")
+        pages_resp = []
+        for p_num in sorted(pages_map.keys()):
+            p = pages_map[p_num]
+            has_trans = bool(
+                (p.translated_path and (os.path.exists(p.translated_path) or resolve_stored_path(p.translated_path, chapter_id, p.page_number, "translated") is not None))
+                or (p.translated_path and p.translated_path.startswith("http"))
+                or (p.status == "rendered")
+            )
+            pages_resp.append(PageItemResponse(
+                page_number=p.page_number,
+                original_url=f"/api/chapters/{chapter_id}/pages/{p.page_number}/original",
+                translated_url=f"/api/chapters/{chapter_id}/pages/{p.page_number}/translated" if has_trans else None,
+                status=p.status
+            ))
+
+        return ChapterDetailResponse(
+            id=chapter.id,
+            title=chapter.title,
+            chapter_number=chapter.chapter_number,
+            language_source=chapter.language_source or "en",
+            pages=pages_resp
         )
-        pages_resp.append(PageItemResponse(
-            page_number=p.page_number,
-            original_url=f"/api/chapters/{chapter_id}/pages/{p.page_number}/original",
-            translated_url=f"/api/chapters/{chapter_id}/pages/{p.page_number}/translated" if has_trans else None,
-            status=p.status
-        ))
-
-    return ChapterDetailResponse(
-        id=chapter.id,
-        title=chapter.title,
-        chapter_number=chapter.chapter_number,
-        language_source=chapter.language_source,
-        pages=pages_resp
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        err_msg = f"get_chapter_detail error: {e}\n{traceback.format_exc()}"
+        logger.error(err_msg)
+        raise HTTPException(status_code=500, detail=err_msg)
 
 @router.get("/{chapter_id}/pages/{page_num}/original")
 def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depends(get_db)):
