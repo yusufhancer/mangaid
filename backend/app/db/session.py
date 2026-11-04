@@ -47,10 +47,17 @@ def init_db():
             except Exception:
                 pass
 
-        # Auto-seed initial Mieruko-chan collection if database is fresh / empty
+        # Auto-seed initial Mieruko-chan collection if database is fresh / empty / corrupted
         try:
+            corrupted = False
             cnt = conn.execute(text("SELECT count(*) FROM chapters")).scalar() or 0
-            if cnt == 0:
+            if cnt > 0:
+                bad_row = conn.execute(text("SELECT count(*) FROM chapters WHERE created_at = 'default'")).scalar() or 0
+                if bad_row > 0:
+                    corrupted = True
+                    print(f"[MangaID] Detected {bad_row} corrupted chapter rows. Re-seeding collection...")
+
+            if cnt == 0 or corrupted:
                 candidate_paths = [
                     Path(__file__).resolve().parent.parent.parent / "seed_data.sql",
                     Path(__file__).resolve().parent.parent.parent / "backend" / "seed_data.sql",
