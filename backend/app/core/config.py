@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     GEMINI_RPD: int = 1500
 
     # App
+    BASE_DIR: Path = BASE_DIR
     DATA_DIR: str = "data"
     DATABASE_URL: str = "sqlite:///./data/mangaid.db"
     LOG_LEVEL: str = "INFO"

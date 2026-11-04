@@ -13,7 +13,7 @@ import img2pdf
 
 from ..db.session import get_db
 from ..db.models import Chapter, PageRecord, Job
-from ..core.config import settings
+from ..core.config import settings, BASE_DIR
 from ..core.logging import logger
 
 router = APIRouter(prefix="/chapters", tags=["Chapters"])
@@ -69,7 +69,7 @@ def resolve_stored_path(p_str: Optional[str], chapter_id: str = "", page_num: in
     if p.is_absolute() and p.exists():
         return p
     # Relative to project base
-    p_from_base = settings.BASE_DIR / p_str
+    p_from_base = BASE_DIR / p_str
     if p_from_base.exists():
         return p_from_base
     # Relative to data directory

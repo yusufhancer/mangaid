@@ -25,7 +25,7 @@ except ImportError:
     types = None
 
 import re
-from ..core.config import settings
+from ..core.config import settings, BASE_DIR
 from ..core.logging import logger
 try:
     from ..db.models import PageRecord, Chapter
@@ -470,7 +470,7 @@ def _resolve_page_path(p_path: Optional[str], chapter_id: str, page_number: int,
     p = Path(p_path)
     if p.is_absolute() and p.exists():
         return p
-    p_from_base = settings.BASE_DIR / p_path
+    p_from_base = BASE_DIR / p_path
     if p_from_base.exists():
         return p_from_base
     norm = p_path.replace("\\", "/")
