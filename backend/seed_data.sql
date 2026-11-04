@@ -7,10 +7,10 @@ CREATE TABLE IF NOT EXISTS chapters (
 	created_at DATETIME, device_id VARCHAR(64) DEFAULT 'default', 
 	PRIMARY KEY (id)
 );
-INSERT OR REPLACE INTO "chapters" VALUES('9052de02-4583-4d85-9c1a-588ad6ec6a2b','Mieruko-chan (Pre-Serialization)','2','en','2026-10-10 10:47:22.089596','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "chapters" VALUES('486b4b41-eba1-4d7f-859a-103c0272c69e','Mieruko-chan (Pre-Serialization)','1','en','2026-10-10 11:59:30.203416','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "chapters" VALUES('349d06d9-3d73-403a-8be1-2f6a62c6a9e6','Mieruko-chan (Pre-Serialization)','3','en','2026-10-10 12:20:55.539810','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "chapters" VALUES('82801f43-4d5e-4a81-9001-17fd997b67bb','Mieruko-chan (Pre-Serialization)','4','en','2026-10-10 12:50:03.786459','dev-e0jdd8f-mv0rylvt');
+INSERT OR REPLACE INTO "chapters" VALUES('9052de02-4583-4d85-9c1a-588ad6ec6a2b','Mieruko-chan (Pre-Serialization)','2','en','2026-10-10 10:47:22.089596','default');
+INSERT OR REPLACE INTO "chapters" VALUES('486b4b41-eba1-4d7f-859a-103c0272c69e','Mieruko-chan (Pre-Serialization)','1','en','2026-10-10 11:59:30.203416','default');
+INSERT OR REPLACE INTO "chapters" VALUES('349d06d9-3d73-403a-8be1-2f6a62c6a9e6','Mieruko-chan (Pre-Serialization)','3','en','2026-10-10 12:20:55.539810','default');
+INSERT OR REPLACE INTO "chapters" VALUES('82801f43-4d5e-4a81-9001-17fd997b67bb','Mieruko-chan (Pre-Serialization)','4','en','2026-10-10 12:50:03.786459','default');
 CREATE TABLE IF NOT EXISTS ingest_sessions (
 	id VARCHAR(36) NOT NULL, 
 	url TEXT NOT NULL, 
@@ -38,14 +38,14 @@ INSERT OR REPLACE INTO "ingest_sessions" VALUES('99dedce2-741a-4923-8170-5c7e396
 INSERT OR REPLACE INTO "ingest_sessions" VALUES('c28a0afe-eab8-41a1-ae63-6efb7d8e6c20','https://mangadex.org/chapter/e9cfaece-daa1-4830-b239-2d09c407b56b/6','Kagami-kun no Kusodeka Shuuai. Watashi ga Kirai na Ofisu no Ouji wa XL de Hentai!?','1','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-08 11:14:55.180167','default');
 INSERT OR REPLACE INTO "ingest_sessions" VALUES('2cc615f5-d27e-4cab-bdb7-3df6f5c65102','https://mangadex.org/chapter/26bbe2b9-9302-4228-8e21-fa88ab08bd06','Mieruko-chan (Pre-Serialization)','1','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-08 11:40:45.552531','default');
 INSERT OR REPLACE INTO "ingest_sessions" VALUES('ee447618-c3bb-4590-83a1-3af99c2cfcc4','https://mangadex.org/chapter/c96170f1-dc57-4f36-815e-0179854df36a','Shingeki no kyojin- Me ni wa mienu hiru no hoshi (doujinshi)','1','es','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-08 11:41:06.886184','default');
-INSERT OR REPLACE INTO "ingest_sessions" VALUES('2ac293d5-104b-4742-851c-93708cd89faf','https://mangadex.org/chapter/26bbe2b9-9302-4228-8e21-fa88ab08bd06','Mieruko-chan (Pre-Serialization)','1','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-09 13:31:40.230284','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "ingest_sessions" VALUES('b6753621-2e20-4001-9ce6-66e02581daad','https://mangadex.org/chapter/644d43d6-f4fe-4442-9e40-4a1f9d99de0c','Mieruko-chan (Pre-Serialization)','2','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 10:47:06.223841','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "ingest_sessions" VALUES('35907ab6-b45c-4d24-807b-6a377d41fed8','https://mangadex.org/chapter/c06a39c9-905b-42be-b4d5-6c7bc8d03be9','Mieruko-chan (Pre-Serialization)','3','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 11:57:48.466956','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "ingest_sessions" VALUES('b5109d59-c9a8-496d-a8ac-1c9ce36fcd71','https://mangadex.org/chapter/e1fd8a22-bc9f-4d1b-9713-c45aba6138e7','Mieruko-chan (Pre-Serialization)','4','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 11:58:07.080016','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "ingest_sessions" VALUES('c7269b82-30c3-4e10-acfc-39a0ce978625','https://mangadex.org/chapter/26bbe2b9-9302-4228-8e21-fa88ab08bd06','Mieruko-chan (Pre-Serialization)','1','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 11:59:27.672413','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "ingest_sessions" VALUES('e6e106ae-40a1-4a54-9350-ec38fe42375c','https://mangadex.org/chapter/34e6778d-289d-4df4-8361-87237e77df4a','Jujutsu Kaisen','1','az','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 12:20:15.831961','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "ingest_sessions" VALUES('8f10606d-9040-40a7-b482-378c283d26c2','https://mangadex.org/chapter/c06a39c9-905b-42be-b4d5-6c7bc8d03be9','Mieruko-chan (Pre-Serialization)','3','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 12:20:52.601141','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "ingest_sessions" VALUES('14a8c8f8-9903-49f7-ada6-0059130311fc','https://mangadex.org/chapter/e1fd8a22-bc9f-4d1b-9713-c45aba6138e7','Mieruko-chan (Pre-Serialization)','4','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 12:50:00.353961','dev-e0jdd8f-mv0rylvt');
+INSERT OR REPLACE INTO "ingest_sessions" VALUES('2ac293d5-104b-4742-851c-93708cd89faf','https://mangadex.org/chapter/26bbe2b9-9302-4228-8e21-fa88ab08bd06','Mieruko-chan (Pre-Serialization)','1','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-09 13:31:40.230284','default');
+INSERT OR REPLACE INTO "ingest_sessions" VALUES('b6753621-2e20-4001-9ce6-66e02581daad','https://mangadex.org/chapter/644d43d6-f4fe-4442-9e40-4a1f9d99de0c','Mieruko-chan (Pre-Serialization)','2','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 10:47:06.223841','default');
+INSERT OR REPLACE INTO "ingest_sessions" VALUES('35907ab6-b45c-4d24-807b-6a377d41fed8','https://mangadex.org/chapter/c06a39c9-905b-42be-b4d5-6c7bc8d03be9','Mieruko-chan (Pre-Serialization)','3','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 11:57:48.466956','default');
+INSERT OR REPLACE INTO "ingest_sessions" VALUES('b5109d59-c9a8-496d-a8ac-1c9ce36fcd71','https://mangadex.org/chapter/e1fd8a22-bc9f-4d1b-9713-c45aba6138e7','Mieruko-chan (Pre-Serialization)','4','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 11:58:07.080016','default');
+INSERT OR REPLACE INTO "ingest_sessions" VALUES('c7269b82-30c3-4e10-acfc-39a0ce978625','https://mangadex.org/chapter/26bbe2b9-9302-4228-8e21-fa88ab08bd06','Mieruko-chan (Pre-Serialization)','1','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 11:59:27.672413','default');
+INSERT OR REPLACE INTO "ingest_sessions" VALUES('e6e106ae-40a1-4a54-9350-ec38fe42375c','https://mangadex.org/chapter/34e6778d-289d-4df4-8361-87237e77df4a','Jujutsu Kaisen','1','az','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 12:20:15.831961','default');
+INSERT OR REPLACE INTO "ingest_sessions" VALUES('8f10606d-9040-40a7-b482-378c283d26c2','https://mangadex.org/chapter/c06a39c9-905b-42be-b4d5-6c7bc8d03be9','Mieruko-chan (Pre-Serialization)','3','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 12:20:52.601141','default');
+INSERT OR REPLACE INTO "ingest_sessions" VALUES('14a8c8f8-9903-49f7-ada6-0059130311fc','https://mangadex.org/chapter/e1fd8a22-bc9f-4d1b-9713-c45aba6138e7','Mieruko-chan (Pre-Serialization)','4','en','layer_0_mangadex',1.0,'{"Referer": "https://mangadex.org/"}','2026-10-10 12:50:00.353961','default');
 CREATE TABLE IF NOT EXISTS jobs (
 	id VARCHAR(36) NOT NULL, 
 	chapter_id VARCHAR(36) NOT NULL, 
@@ -59,10 +59,10 @@ CREATE TABLE IF NOT EXISTS jobs (
 	updated_at DATETIME, device_id VARCHAR(64) DEFAULT 'default', 
 	PRIMARY KEY (id)
 );
-INSERT OR REPLACE INTO "jobs" VALUES('04df8562-c45d-48c3-84ac-3db23b0be0c6','9052de02-4583-4d85-9c1a-588ad6ec6a2b','done',4,4,4,NULL,'{"tone": "gaul", "honorifics": "keep"}','2026-10-10 10:47:22.100959','2026-10-10 10:48:27.659269','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "jobs" VALUES('88a4a69d-34ac-465b-a441-b452db18b58b','486b4b41-eba1-4d7f-859a-103c0272c69e','done',4,4,4,NULL,'{"tone": "gaul", "honorifics": "keep"}','2026-10-10 11:59:30.210911','2026-10-10 11:59:58.215269','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "jobs" VALUES('238b9757-d703-413e-99ae-6161875dd43d','349d06d9-3d73-403a-8be1-2f6a62c6a9e6','done',4,4,4,NULL,'{"tone": "gaul", "honorifics": "keep"}','2026-10-10 12:20:55.564018','2026-10-10 12:39:14.018994','dev-e0jdd8f-mv0rylvt');
-INSERT OR REPLACE INTO "jobs" VALUES('a0250420-1801-47e4-96bd-cd33f85dfaea','82801f43-4d5e-4a81-9001-17fd997b67bb','done',4,4,4,NULL,'{"tone": "gaul", "honorifics": "keep"}','2026-10-10 12:50:03.797063','2026-10-10 12:50:29.363466','dev-e0jdd8f-mv0rylvt');
+INSERT OR REPLACE INTO "jobs" VALUES('04df8562-c45d-48c3-84ac-3db23b0be0c6','9052de02-4583-4d85-9c1a-588ad6ec6a2b','done',4,4,4,NULL,'{"tone": "gaul", "honorifics": "keep"}','2026-10-10 10:47:22.100959','2026-10-10 10:48:27.659269','default');
+INSERT OR REPLACE INTO "jobs" VALUES('88a4a69d-34ac-465b-a441-b452db18b58b','486b4b41-eba1-4d7f-859a-103c0272c69e','done',4,4,4,NULL,'{"tone": "gaul", "honorifics": "keep"}','2026-10-10 11:59:30.210911','2026-10-10 11:59:58.215269','default');
+INSERT OR REPLACE INTO "jobs" VALUES('238b9757-d703-413e-99ae-6161875dd43d','349d06d9-3d73-403a-8be1-2f6a62c6a9e6','done',4,4,4,NULL,'{"tone": "gaul", "honorifics": "keep"}','2026-10-10 12:20:55.564018','2026-10-10 12:39:14.018994','default');
+INSERT OR REPLACE INTO "jobs" VALUES('a0250420-1801-47e4-96bd-cd33f85dfaea','82801f43-4d5e-4a81-9001-17fd997b67bb','done',4,4,4,NULL,'{"tone": "gaul", "honorifics": "keep"}','2026-10-10 12:50:03.797063','2026-10-10 12:50:29.363466','default');
 CREATE TABLE IF NOT EXISTS page_candidates (
 	id VARCHAR(36) NOT NULL, 
 	session_id VARCHAR(36) NOT NULL, 

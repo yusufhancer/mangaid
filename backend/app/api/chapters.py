@@ -219,6 +219,7 @@ def list_chapters(request: Request, db: Session = Depends(get_db)):
                 or (p.original_path and p.original_path.startswith("http"))
                 or (p.translated_path and p.translated_path.startswith("http"))
                 or (not p.original_path and not p.translated_path) # placeholder for restored chapters
+                or p.regions_json # pre-seeded chapters with dialogues
             )
         )
         total_p = len(pages_map)
