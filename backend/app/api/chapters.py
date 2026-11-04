@@ -374,7 +374,10 @@ def get_chapter_detail(chapter_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=err_msg)
 
 def _recover_mangadex_chapter_urls(title: str, ch_num: Optional[str]) -> List[str]:
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MangaID/1.5"}
+    headers = {
+        "User-Agent": "MangaID/1.0 (https://github.com/mangaid-app)",
+        "Accept": "application/json"
+    }
     try:
         clean_title = re.sub(r"[\(\)\[\]\-_]", " ", title).strip()
         words = [w for w in clean_title.split() if len(w) > 2]

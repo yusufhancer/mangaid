@@ -29,6 +29,16 @@ def health_check():
 def get_version():
     return CURRENT_VERSION
 
+@router.get("/test_recover")
+def test_recover(title: str = "Koisuru (Otome) no Tsukurikata", ch: str = "0.1"):
+    from .chapters import _recover_mangadex_chapter_urls
+    import traceback
+    try:
+        urls = _recover_mangadex_chapter_urls(title, ch)
+        return {"status": "ok", "title": title, "ch": ch, "urls_count": len(urls), "urls": urls}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+
 @router.post("/db/seed")
 def trigger_seed():
     from ..db.session import init_db, SessionLocal
