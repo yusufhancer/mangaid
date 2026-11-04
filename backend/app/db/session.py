@@ -32,9 +32,10 @@ def get_db():
 
 def init_db():
     from . import models  # noqa
+    from pathlib import Path
     Base.metadata.create_all(bind=engine)
 
-    # Lightweight auto-migration for device_id column
+    # Lightweight auto-migration for device_id column & auto-seeding Mieruko-chan
     with engine.connect() as conn:
         for table in ["chapters", "jobs", "ingest_sessions"]:
             try:
@@ -45,3 +46,23 @@ def init_db():
                     conn.commit()
             except Exception:
                 pass
+
+        # Auto-seed initial Mieruko-chan collection if database is fresh / empty
+        try:
+            cnt = conn.execute(text("SELECT count(*) FROM chapters")).scalar() or 0
+            if cnt == 0:
+                candidate_paths = [
+                    Path(__file__).resolve().parent.parent.parent / "seed_data.sql",
+                    Path(__file__).resolve().parent.parent / "seed_data.sql",
+                    Path("/app/backend/seed_data.sql"),
+                ]
+                for seed_path in candidate_paths:
+                    if seed_path.exists():
+                        sql_text = seed_path.read_text(encoding="utf-8")
+                        raw_conn = conn.connection
+                        raw_conn.executescript(sql_text)
+                        conn.commit()
+                        print(f"[MangaID] Auto-seeded initial collection from {seed_path}")
+                        break
+        except Exception as e:
+            print(f"[MangaID] Warning: auto-seed initial collection skipped: {e}")

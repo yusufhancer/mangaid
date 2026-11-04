@@ -4,16 +4,16 @@ import httpx
 router = APIRouter(tags=["Health"])
 
 CURRENT_VERSION = {
-    "version": "1.5.6",
+    "version": "1.5.7",
     "release_date": "4 November 2026",
-    "title": "MangaID Authentic Gemini Voice Acting Engine Restoration",
+    "title": "MangaID Complete Audio Soul Engine & Auto-Seeded Koleksi",
     "changelog": [
-        "Pemulihan Penuh Model Asli Gemini TTS: Mengembalikan model kerja gemini-2.5-flash-preview-tts, gemini-3.1-flash-tts-preview, dan gemini-3.8-flash-tts menggantikan gemini-2.0-flash yang 404",
+        "Seed Otomatis Koleksi Mieruko-chan: Menyematkan Bab 1-4 Mieruko-chan lengkap dengan region dialog, terjemahan, dan rekaman audio asli Gemini WAV 24kHz ke database awal server",
+        "On-Demand Gemini Vision OCR & Dialog Synthesis: Narasi otomatis mendeteksi dan menerjemahkan balon teks pada komik Baca Langsung (MangaDex/Komikindo) secara live dengan suara anime Aoede & Charon",
+        "Resolusi Jalur File Lintas-Platform (Linux/Windows/Docker): Menormalkan seluruh jalur penyimpanan gambar dan audio sehingga tidak ada broken image/audio 404 saat migrasi OS",
+        "Pemulihan Penuh Model Asli Gemini TTS: Mengembalikan model kerja gemini-2.5-flash-preview-tts, gemini-3.1-flash-tts-preview, dan gemini-3.8-flash-tts",
         "Dual-Transport REST + SDK Synthesis: Menggunakan arsitektur direct REST stream 24000Hz L16 PCM + SDK fallback untuk kehandalan 100% tanpa delay",
-        "Rotasi Multi-Key Otomatis & Anti-Leak Blacklist: Menyaring kunci 403/bocor dan merotasikan 4 kunci aktif pengguna secara mulus saat mencapai limit burst RPM",
-        "Pembersihan Total Audio Robotik & Stale Fallback Purge: Otomatis menghapus cache fallback MP3 lama saat audio WAV Gemini berkualitas tinggi berhasil dihasilkan",
-        "Pemberitahuan Halaman Kosong dengan Suara Gemini: Halaman tanpa dialog kini dinarasikan menggunakan suara vokal Gemini (Aoede/Fenrir) asli",
-        "Pembersihan Total Fallback Google Web Speech API di Frontend"
+        "Pembersihan Total Fallback Google Web Speech API & Edge-TTS Purge"
     ]
 }
 

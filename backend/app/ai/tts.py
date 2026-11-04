@@ -12,7 +12,11 @@ try:
 except ImportError:
     edge_tts = None
 
-from sqlalchemy.orm import Session
+try:
+    from sqlalchemy.orm import Session
+except ImportError:
+    Session = Any  # type: ignore
+
 try:
     from google import genai
     from google.genai import types
@@ -23,7 +27,11 @@ except ImportError:
 import re
 from ..core.config import settings
 from ..core.logging import logger
-from ..db.models import PageRecord, Chapter
+try:
+    from ..db.models import PageRecord, Chapter
+except ImportError:
+    PageRecord = None  # type: ignore
+    Chapter = None  # type: ignore
 
 DEFAULT_VOICE = "auto"
 
@@ -456,6 +464,117 @@ def stitch_wav_buffers(wav_bytes_list: List[bytes], sample_rate: int = 24000) ->
 
     return out_buf.getvalue()
 
+def _resolve_page_path(p_path: Optional[str], chapter_id: str, page_number: int, img_type: str = "original") -> Optional[Path]:
+    if not p_path or p_path.startswith("http"):
+        return None
+    p = Path(p_path)
+    if p.is_absolute() and p.exists():
+        return p
+    p_from_base = settings.BASE_DIR / p_path
+    if p_from_base.exists():
+        return p_from_base
+    norm = p_path.replace("\\", "/")
+    if "data/chapters/" in norm:
+        rel = norm.split("data/chapters/", 1)[1]
+        cand = settings.data_path / "chapters" / rel
+        if cand.exists():
+            return cand
+    cand = settings.data_path / "chapters" / chapter_id / img_type / f"page_{page_number:04d}.png"
+    if cand.exists():
+        return cand
+    cand = settings.data_path / "chapters" / chapter_id / img_type / f"page_{page_number:04d}.jpg"
+    if cand.exists():
+        return cand
+    return None
+
+async def load_page_image_bytes(record: Any, chapter_id: str, page_number: int) -> Optional[bytes]:
+    p_path = record.original_path if (record and record.original_path) else None
+    if not p_path and record and record.translated_path:
+        p_path = record.translated_path
+
+    if p_path and p_path.startswith("http"):
+        headers = {
+            "User-Agent": "MangaID/1.5.6 (https://haven-door-mangaid.hf.space)",
+            "Referer": "https://mangadex.org/",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
+                r = await client.get(p_path)
+                if r.status_code == 200 and len(r.content) > 1000:
+                    return r.content
+        except Exception as e:
+            logger.warning("Failed to fetch page image from URL %s: %s", p_path, e)
+
+    resolved = _resolve_page_path(p_path, chapter_id, page_number, "original")
+    if not resolved:
+        resolved = _resolve_page_path(p_path, chapter_id, page_number, "translated")
+    if resolved and resolved.exists():
+        return resolved.read_bytes()
+    return None
+
+async def ensure_page_dialogues_on_demand(
+    chapter_id: str,
+    page_number: int,
+    db: Session
+) -> List[Dict[str, Any]]:
+    dialogues = get_page_dialogues(chapter_id, page_number, db)
+    if dialogues:
+        return dialogues
+
+    if not db or not PageRecord:
+        return []
+
+    record = db.query(PageRecord).filter(
+        PageRecord.chapter_id == chapter_id,
+        PageRecord.page_number == page_number
+    ).first()
+    if not record:
+        return []
+
+    # If regions_json was explicitly analyzed before and has 0 text bubbles (legitimate artwork page), don't re-OCR
+    if record.regions_json is not None:
+        return []
+
+    try:
+        img_bytes = await load_page_image_bytes(record, chapter_id, page_number)
+        if not img_bytes:
+            return []
+
+        from .analyze import PageAnalyzer
+        from .translate import ChapterTranslator
+        analyzer = PageAnalyzer()
+        res = await analyzer.analyze_page(img_bytes, page_number=page_number)
+        regions = res.get("regions", [])
+        if not regions:
+            record.regions_json = "[]"
+            db.commit()
+            return []
+
+        # Check if translation is needed
+        needs_trans = any(
+            not r.get("translated_text") and r.get("source_text") and not is_credit_or_watermark(r.get("source_text", ""))
+            for r in regions
+        )
+        if needs_trans:
+            translator = ChapterTranslator()
+            trans_res = await translator.translate_chapter([res], tone_preset="gaul", honorifics="keep")
+            t_map = trans_res.get("translations", {})
+            for r in regions:
+                t_val = t_map.get((page_number, r.get("id"))) or t_map.get(r.get("id"))
+                if t_val:
+                    r["translated_text"] = t_val
+
+        record.regions_json = json.dumps(regions)
+        record.status = "analyzed"
+        db.commit()
+        logger.info("On-demand OCR generated %d dialogue regions for p%d", len(regions), page_number)
+
+        return get_page_dialogues(chapter_id, page_number, db)
+    except Exception as err:
+        logger.warning("On-demand OCR for p%d failed: %s", page_number, err)
+        return []
+
 async def get_or_generate_page_audio(
     chapter_id: str,
     page_number: int,
@@ -479,7 +598,7 @@ async def get_or_generate_page_audio(
     if not db:
         return None
 
-    dialogues = get_page_dialogues(chapter_id, page_number, db)
+    dialogues = await ensure_page_dialogues_on_demand(chapter_id, page_number, db)
     if not dialogues:
         audio_dir.mkdir(parents=True, exist_ok=True)
         chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()

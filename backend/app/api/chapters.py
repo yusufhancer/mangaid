@@ -59,6 +59,35 @@ class SyncChapterItem(BaseModel):
 class SyncChaptersRequest(BaseModel):
     chapters: List[SyncChapterItem]
 
+def resolve_stored_path(p_str: Optional[str], chapter_id: str = "", page_num: int = 1, img_type: str = "original") -> Optional[Path]:
+    """
+    Robust cross-platform path resolver for images and audio across Windows, Linux, and Docker environments.
+    """
+    if not p_str or p_str.startswith("http"):
+        return None
+    p = Path(p_str)
+    if p.is_absolute() and p.exists():
+        return p
+    # Relative to project base
+    p_from_base = settings.BASE_DIR / p_str
+    if p_from_base.exists():
+        return p_from_base
+    # Relative to data directory
+    norm = p_str.replace("\\", "/")
+    if "data/chapters/" in norm:
+        rel = norm.split("data/chapters/", 1)[1]
+        cand = settings.data_path / "chapters" / rel
+        if cand.exists():
+            return cand
+    # Fallback convention: data/chapters/{chapter_id}/{img_type}/page_{page_num:04d}.(jpg|png)
+    if chapter_id:
+        target_dir = settings.data_path / "chapters" / chapter_id / img_type
+        for ext in (".png", ".jpg", ".jpeg", ".webp"):
+            cand = target_dir / f"page_{page_num:04d}{ext}"
+            if cand.exists():
+                return cand
+    return None
+
 @router.post("/sync")
 def sync_chapters(payload: SyncChaptersRequest, request: Request, db: Session = Depends(get_db)):
     device_id = request.headers.get("x-device-id") or "default"
@@ -186,7 +215,7 @@ def list_chapters(request: Request, db: Session = Depends(get_db)):
         rendered = sum(
             1 for p in pages_map.values()
             if p.status == "rendered" and (
-                (p.translated_path and os.path.exists(p.translated_path))
+                (p.translated_path and (os.path.exists(p.translated_path) or resolve_stored_path(p.translated_path, c.id, p.page_number, "translated") is not None))
                 or (p.original_path and p.original_path.startswith("http"))
                 or (p.translated_path and p.translated_path.startswith("http"))
                 or (not p.original_path and not p.translated_path) # placeholder for restored chapters
@@ -294,7 +323,7 @@ def get_chapter_detail(chapter_id: str, db: Session = Depends(get_db)):
     for p_num in sorted(pages_map.keys()):
         p = pages_map[p_num]
         has_trans = bool(
-            (p.translated_path and os.path.exists(p.translated_path))
+            (p.translated_path and (os.path.exists(p.translated_path) or resolve_stored_path(p.translated_path, chapter_id, p.page_number, "translated") is not None))
             or (p.translated_path and p.translated_path.startswith("http"))
             or (p.status == "rendered")
         )
@@ -322,10 +351,11 @@ def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depend
     if record and record.original_path:
         if record.original_path.startswith("http"):
             return RedirectResponse(f"/api/proxy/image?url={quote(record.original_path, safe='')}")
-        if os.path.exists(record.original_path):
-            ext = Path(record.original_path).suffix.lower()
+        resolved = resolve_stored_path(record.original_path, chapter_id, page_num, "original")
+        if resolved and resolved.exists():
+            ext = resolved.suffix.lower()
             media_type = "image/png" if ext == ".png" else "image/jpeg"
-            return FileResponse(record.original_path, media_type=media_type)
+            return FileResponse(str(resolved), media_type=media_type)
 
     orig_dir = settings.data_path / "chapters" / chapter_id / "original"
     jpg_path = orig_dir / f"page_{page_num:04d}.jpg"
@@ -346,10 +376,11 @@ def get_translated_page_image(chapter_id: str, page_num: int, db: Session = Depe
     if record and record.translated_path:
         if record.translated_path.startswith("http"):
             return RedirectResponse(f"/api/proxy/image?url={quote(record.translated_path, safe='')}")
-        if os.path.exists(record.translated_path):
-            ext = Path(record.translated_path).suffix.lower()
+        resolved = resolve_stored_path(record.translated_path, chapter_id, page_num, "translated")
+        if resolved and resolved.exists():
+            ext = resolved.suffix.lower()
             media_type = "image/jpeg" if ext in (".jpg", ".jpeg", ".webp") else "image/png"
-            return FileResponse(record.translated_path, media_type=media_type)
+            return FileResponse(str(resolved), media_type=media_type)
 
     trans_dir = settings.data_path / "chapters" / chapter_id / "translated"
     png_path = trans_dir / f"page_{page_num:04d}.png"
