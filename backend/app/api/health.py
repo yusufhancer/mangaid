@@ -19,37 +19,10 @@ CURRENT_VERSION = {
 
 @router.get("/health")
 def health_check():
-    from ..db.session import SessionLocal, db_url
-    from ..db.models import Chapter, PageRecord
-    from pathlib import Path
-    import os
-
-    db = SessionLocal()
-    ch_count = 0
-    pages_count = 0
-    all_ch = []
-    try:
-        chapters = db.query(Chapter).all()
-        ch_count = len(chapters)
-        pages_count = db.query(PageRecord).count()
-        all_ch = [{"id": c.id, "title": c.title, "dev_id": c.device_id, "pages": len(c.pages)} for c in chapters]
-    except Exception as e:
-        ch_count = f"Error: {e}"
-    finally:
-        db.close()
-
-    seed_p = Path(__file__).resolve().parent.parent.parent / "seed_data.sql"
-
     return {
         "status": "ok",
         "app": "MangaID",
-        "version": CURRENT_VERSION["version"],
-        "db_url": db_url,
-        "seed_sql_exists": seed_p.exists(),
-        "seed_sql_path": str(seed_p),
-        "chapters_count": ch_count,
-        "page_records_count": pages_count,
-        "chapters": all_ch
+        "version": CURRENT_VERSION["version"]
     }
 
 @router.get("/version")
