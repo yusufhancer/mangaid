@@ -2216,6 +2216,23 @@ export default function MangaIDApp() {
         const cached = localStorage.getItem(`mangaid_detail_${cId}`);
         if (cached) {
           const cachedData: ChapterData = JSON.parse(cached);
+          // Sync missing chapter back to backend SQLite in background
+          apiFetch(`${BACKEND_URL}/api/chapters/sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chapters: [{
+                id: cachedData.id,
+                title: cachedData.title,
+                chapter_number: cachedData.chapter_number,
+                language_source: cachedData.language_source || "id",
+                total_pages: cachedData.pages.length,
+                rendered_pages: cachedData.pages.length,
+                pages: cachedData.pages.map((p: any) => p.image_url || (p.original_url?.startsWith("http") ? p.original_url : undefined)).filter(Boolean)
+              }]
+            })
+          }).catch(() => {});
+
           setChapterData(cachedData);
           setSinglePageIdx(0);
           setView("reader");
@@ -4737,11 +4754,12 @@ export default function MangaIDApp() {
                     Math.max(0, chapterData.pages.length - 1)
                   );
                   const curPage = chapterData.pages[safeSingleIdx] || chapterData.pages[0];
+                  const metaQuery = `title=${encodeURIComponent(chapterData.title || "")}&ch=${encodeURIComponent(chapterData.chapter_number || "")}`;
                   const isTrans = showTranslated && Boolean(curPage?.translated_url);
                   const curImgSrc = curPage
-                    ? isTrans
-                      ? `${BACKEND_URL}${curPage.translated_url}?v=2`
-                      : `${BACKEND_URL}${curPage.original_url}?v=2`
+                    ? isTrans && curPage.translated_url
+                      ? `${BACKEND_URL}${curPage.translated_url}${curPage.translated_url.includes("?") ? "&" : "?"}${metaQuery}`
+                      : `${BACKEND_URL}${curPage.original_url}${curPage.original_url.includes("?") ? "&" : "?"}${metaQuery}`
                     : "";
 
                   return (
@@ -4951,10 +4969,11 @@ export default function MangaIDApp() {
             <div className="flex-1 bg-[#191a1c] flex flex-col items-center py-4 px-0">
               <div className="max-w-3xl w-full flex flex-col items-center">
                 {chapterData.pages.map((p) => {
+                  const metaQuery = `title=${encodeURIComponent(chapterData.title || "")}&ch=${encodeURIComponent(chapterData.chapter_number || "")}`;
                   const isTrans = showTranslated && Boolean(p.translated_url);
-                  const imgSrc = isTrans
-                    ? `${BACKEND_URL}${p.translated_url}?v=2`
-                    : `${BACKEND_URL}${p.original_url}?v=2`;
+                  const imgSrc = isTrans && p.translated_url
+                    ? `${BACKEND_URL}${p.translated_url}${p.translated_url.includes("?") ? "&" : "?"}${metaQuery}`
+                    : `${BACKEND_URL}${p.original_url}${p.original_url.includes("?") ? "&" : "?"}${metaQuery}`;
 
                   return (
                     <div

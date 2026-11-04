@@ -408,7 +408,12 @@ def _recover_mangadex_chapter_urls(title: str, ch_num: Optional[str]) -> List[st
     return []
 
 @router.get("/{chapter_id}/pages/{page_num}/original")
-def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depends(get_db)):
+def get_original_page_image(
+    chapter_id: str,
+    page_num: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     record = db.query(PageRecord).filter(
         PageRecord.chapter_id == chapter_id,
         PageRecord.page_number == page_num
@@ -430,17 +435,43 @@ def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depend
     if png_path.exists():
         return FileResponse(str(png_path), media_type="image/png")
 
-    # AUTO-HEAL: If image is missing, attempt to recover from MangaDex online by chapter title & number
+    # AUTO-HEAL: Recover from MangaDex online by chapter title & number
     chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
-    if chapter and chapter.title:
-        recovered_urls = _recover_mangadex_chapter_urls(chapter.title, chapter.chapter_number)
+    title = (chapter.title if chapter else None) or request.query_params.get("title")
+    ch_num = (chapter.chapter_number if chapter else None) or request.query_params.get("ch") or "1"
+
+    if title:
+        recovered_urls = _recover_mangadex_chapter_urls(title, ch_num)
         if recovered_urls:
+            if not chapter:
+                chapter = Chapter(
+                    id=chapter_id,
+                    title=title,
+                    chapter_number=ch_num,
+                    language_source="id",
+                    device_id="default"
+                )
+                db.add(chapter)
+                db.commit()
+
             all_records = db.query(PageRecord).filter(PageRecord.chapter_id == chapter_id).order_by(PageRecord.page_number).all()
-            for idx, rec in enumerate(all_records):
-                if idx < len(recovered_urls):
-                    rec.original_path = recovered_urls[idx]
-                    if not rec.translated_path or not rec.translated_path.startswith("http"):
-                        rec.translated_path = recovered_urls[idx]
+            if not all_records:
+                for idx, u in enumerate(recovered_urls, start=1):
+                    rec = PageRecord(
+                        id=str(uuid.uuid4()),
+                        chapter_id=chapter_id,
+                        page_number=idx,
+                        original_path=u,
+                        translated_path=u,
+                        status="rendered"
+                    )
+                    db.add(rec)
+            else:
+                for idx, rec in enumerate(all_records):
+                    if idx < len(recovered_urls):
+                        rec.original_path = recovered_urls[idx]
+                        if not rec.translated_path or not rec.translated_path.startswith("http"):
+                            rec.translated_path = recovered_urls[idx]
             db.commit()
             if 1 <= page_num <= len(recovered_urls):
                 return RedirectResponse(f"/api/proxy/image?url={quote(recovered_urls[page_num - 1], safe='')}")
@@ -448,12 +479,17 @@ def get_original_page_image(chapter_id: str, page_num: int, db: Session = Depend
     raise HTTPException(status_code=404, detail="Original image not found.")
 
 @router.get("/{chapter_id}/pages/{page_num}/translated")
-def get_translated_page_image(chapter_id: str, page_num: int, db: Session = Depends(get_db)):
+def get_translated_page_image(
+    chapter_id: str,
+    page_num: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     record = db.query(PageRecord).filter(
         PageRecord.chapter_id == chapter_id,
         PageRecord.page_number == page_num
     ).first()
-    if record and record.translated_path:
+    if record and record.translated_path and not record.translated_path.startswith("/api/"):
         if record.translated_path.startswith("http"):
             return RedirectResponse(f"/api/proxy/image?url={quote(record.translated_path, safe='')}")
         resolved = resolve_stored_path(record.translated_path, chapter_id, page_num, "translated")
@@ -471,7 +507,7 @@ def get_translated_page_image(chapter_id: str, page_num: int, db: Session = Depe
         return FileResponse(str(jpg_path), media_type="image/jpeg")
 
     # Fallback to original image if translated image does not exist yet
-    return get_original_page_image(chapter_id, page_num, db)
+    return get_original_page_image(chapter_id, page_num, request, db)
 
 @router.get("/local-file/{session_id}/{filename}")
 def get_uploaded_file(session_id: str, filename: str):
