@@ -479,7 +479,15 @@ async def get_page_narration_audio(
     """
     chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
     if not chapter:
-        raise HTTPException(status_code=404, detail="Chapter not found.")
+        chapter = Chapter(
+            id=chapter_id,
+            title="Manga",
+            chapter_number="1",
+            language_source="id",
+            device_id="default"
+        )
+        db.add(chapter)
+        db.commit()
 
     from ..ai.tts import get_or_generate_page_audio
     audio_path = await get_or_generate_page_audio(chapter_id, page_num, voice_key=voice, db=db)

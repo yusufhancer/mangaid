@@ -2327,9 +2327,6 @@ export default function MangaIDApp() {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
     };
   }, []);
 
@@ -2399,37 +2396,9 @@ export default function MangaIDApp() {
       };
 
       audio.onerror = () => {
-        // Fallback to Web Speech API so narration never breaks!
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-          try {
-            window.speechSynthesis.cancel();
-            const fallbackText = `Halaman ${pageNum}. Bab ${chapterData.chapter_number || "1"}. ${chapterData.title || ""}.`;
-            const utter = new SpeechSynthesisUtterance(fallbackText);
-            utter.lang = "id-ID";
-            utter.rate = speed;
-            utter.onend = () => {
-              if (pageNum < chapterData.pages.length) {
-                const nextPage = pageNum + 1;
-                if (readerMode === "single") goToSlidePage(nextPage - 1);
-                else {
-                  const el = document.getElementById(`webtoon-page-${nextPage}`);
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }
-                playPageAudio(nextPage, voice, speed);
-              } else {
-                setAudioPlaying(false);
-              }
-            };
-            window.speechSynthesis.speak(utter);
-            setAudioLoading(false);
-            setAudioPlaying(true);
-            setAudioError(null);
-            return;
-          } catch {}
-        }
         setAudioLoading(false);
         setAudioPlaying(false);
-        setAudioError("Halaman ini belum memiliki teks dialog.");
+        setAudioError("Halaman ini belum memiliki teks dialog atau audio sedang diproses AI.");
       };
 
       audio.oncanplay = () => {
@@ -2455,9 +2424,6 @@ export default function MangaIDApp() {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
       setAudioPlaying(false);
       setShowAudioPlayer(false);
     } else {
@@ -2475,9 +2441,6 @@ export default function MangaIDApp() {
     }
     if (audioPlaying) {
       audioRef.current.pause();
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.pause();
-      }
       setAudioPlaying(false);
     } else {
       audioRef.current.play().then(() => setAudioPlaying(true)).catch(() => {
